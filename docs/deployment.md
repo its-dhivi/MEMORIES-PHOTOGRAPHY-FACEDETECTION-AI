@@ -3,7 +3,7 @@
 The AI container installs CPU ONNX Runtime and mounts `/models`; it contains no weights in the
 image. For local development, run `powershell -ExecutionPolicy Bypass -File
 scripts/provision-face-models.ps1` once before `docker compose up -d --build`. The script downloads
-the configured YuNet and SFace artifacts into the named Docker volume and verifies pinned checksums.
+the configured YuNet and ArcFace artifacts into the named Docker volume and verifies pinned checksums.
 In production, provision the reviewed artifacts through a controlled artifact system and mount them
 read-only. One service process loads models once; scale using separate containers and bounded
 inference concurrency.

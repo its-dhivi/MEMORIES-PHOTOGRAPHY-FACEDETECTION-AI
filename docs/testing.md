@@ -8,7 +8,7 @@ Automated coverage includes missing-model readiness, invalid internal credential
 
 Recognition-accuracy suites intentionally require separately managed licensed and consented fixtures. Before production, execute single/multiple/no-face, blur, low-light, same/different-person, threshold, event isolation, deleted-photo, throughput, and full database/storage tests. Never fabricate metrics.
 
-The local stack can use checksum-pinned OpenCV Zoo YuNet and SFace artifacts provisioned outside
+The local stack can use checksum-pinned OpenCV Zoo YuNet and ONNX Model Zoo ArcFace artifacts provisioned outside
 Git. Readiness, real ONNX inference, event-photo indexing, and same-image selfie matching must be
 verified after provisioning. Accuracy calibration across different photographs still requires a
 representative, explicitly consented validation set; a same-image smoke test is not an accuracy

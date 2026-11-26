@@ -51,7 +51,11 @@ class ModelManager:
                 0.3,
                 5000,
             )
-            self.recognizer = ort.InferenceSession(str(recognizer_path), providers=providers)
+            session_options = ort.SessionOptions()
+            session_options.log_severity_level = 3
+            self.recognizer = ort.InferenceSession(
+                str(recognizer_path), sess_options=session_options, providers=providers
+            )
             self.providers = self.recognizer.get_providers()
             inputs, outputs = self.recognizer.get_inputs(), self.recognizer.get_outputs()
             if len(inputs) != 1 or not outputs:
@@ -166,8 +170,8 @@ class ModelManager:
         if recognizer is None:
             raise RuntimeError("Recognition model is unavailable")
         rgb = aligned[:, :, ::-1].astype(np.float32)
-        # OpenCV FaceRecognizerSF.feature uses blobFromImage with scale=1 and
-        # mean=0. SFace expects RGB values in the original 0..255 range.
+        # The ONNX ArcFace model accepts aligned RGB pixels in the original
+        # 0..255 range. Normalizing here collapses its score distribution.
         tensor = rgb.transpose(2, 0, 1)[None, ...]
         vector = recognizer.run(None, {self.input_name: tensor})[0][0].astype(np.float32)
         if vector.shape[0] != self.settings.face_recognition_output_dimension or not np.isfinite(

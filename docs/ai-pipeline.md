@@ -3,14 +3,15 @@
 ## Model contract and licensing
 
 Model weights are not committed to Git. Local development uses the operator-run
-`scripts/provision-face-models.ps1` command to fetch OpenCV Zoo's YuNet detector and SFace
-recognizer into the private Docker model volume and verify their pinned SHA-256 checksums. YuNet's
-model directory declares MIT licensing and SFace's directory declares Apache-2.0 licensing. A
+`scripts/provision-face-models.ps1` command to fetch OpenCV Zoo's YuNet detector and the ONNX Model
+Zoo ArcFace ResNet100 INT8 recognizer into the private Docker model volume and verify pinned SHA-256
+checksums. YuNet's model directory declares MIT licensing and the ONNX Model Zoo model is distributed
+under Apache-2.0. A
 production operator must still review model licensing, training-data provenance, biometric law, and
 fitness for the intended jurisdiction before deployment.
 
-SFace produces a normalized 128-dimensional vector. The AI adapter zero-pads it to the existing
-`vector(512)` storage contract; cosine similarity is unchanged by this padding. Every search is also
+ArcFace produces a 512-dimensional vector that is L2-normalized before storage in `vector(512)`.
+Every search is also
 restricted to the exact model version, event, active guest session, and current consent.
 
 Startup validates model files, CPU/CUDA provider, shapes, output dimension, and a warm-up inference. `/health/live` reports process liveness. `/health/ready` returns 503 until both models load. GPU is never reported unless CUDAExecutionProvider is active.

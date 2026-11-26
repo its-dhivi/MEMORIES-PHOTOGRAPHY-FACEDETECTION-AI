@@ -3,7 +3,7 @@
 A privacy-focused event photography platform for private event uploads, asynchronous face indexing, and consented event-scoped selfie matching.
 
 > Status: **The complete local guest search pipeline is implemented.** The premium guest journey,
-> HttpOnly BFF session, PIN and consent flow, camera/upload UI, event-scoped SFace search, secure
+> HttpOnly BFF session, PIN and consent flow, camera/upload UI, event-scoped ArcFace search, secure
 > result gallery, authorized downloads, and bounded queue-backed ZIP exports are integrated. Model
 > artifacts remain outside Git and require the provisioning command below. Production deployment
 > still requires legal review and accuracy calibration with representative consented data.
@@ -41,7 +41,7 @@ Requirements: Node.js 22, pnpm 10, Docker Compose v2, and Python 3.11/3.12.
 
 1. Copy `.env.example` to `.env` and replace secrets.
 2. Run `powershell -ExecutionPolicy Bypass -File scripts/provision-face-models.ps1` to provision and
-   checksum-verify the local YuNet and SFace models. Review their licenses before production use.
+   checksum-verify the local YuNet and ArcFace models. Review their licenses before production use.
 3. Run `pnpm install`, `pnpm db:generate`, and `pnpm db:migrate`.
 4. Run `docker compose up --build`.
 5. Confirm `/health/live` and then `/health/ready`; readiness must report the configured model.
