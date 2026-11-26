@@ -1,0 +1,211 @@
+@import 'tailwindcss';
+@source "../../../packages/ui/src";
+@theme {
+  --color-charcoal: #252522;
+  --color-ivory: #faf9f6;
+  --color-gold: #765f45;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), Georgia, serif;
+  --font-mono: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+}
+:root {
+  color-scheme: light;
+  --canvas: #faf9f6;
+  --surface: #ffffff;
+  --surface-2: #f3f0eb;
+  --surface-3: #e9e4dd;
+  --text: #252522;
+  --muted: #696660;
+  --line: #e8e4dd;
+  --gold: #765f45;
+  --success: #53705a;
+  --warning: #9a6b2f;
+  --error: #9d4848;
+  --shadow-soft: 0 24px 80px rgba(55, 45, 34, 0.1);
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  background: var(--canvas);
+  color: var(--text);
+  scroll-behavior: smooth;
+}
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+:focus-visible {
+  outline: 2px solid #766149;
+  outline-offset: 3px;
+}
+::selection {
+  background: #ded2c2;
+  color: #252522;
+}
+.font-serif {
+  letter-spacing: -0.03em;
+}
+.glass {
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
+}
+.surface {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.14);
+}
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #765f45;
+}
+.button-primary {
+  display: inline-flex;
+  min-height: 2.85rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  background: #252522;
+  padding: 0.7rem 1.1rem;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 650;
+  box-shadow: 0 10px 28px rgba(37, 37, 34, 0.12);
+  transition:
+    transform 0.16s,
+    filter 0.16s;
+}
+.button-primary:hover {
+  background: #4a443d;
+  transform: translateY(-1px);
+}
+.button-secondary {
+  display: inline-flex;
+  min-height: 2.85rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.7rem 1.1rem;
+  color: var(--text);
+  font-size: 0.875rem;
+  transition:
+    background 0.16s,
+    border-color 0.16s;
+}
+.button-secondary:hover {
+  background: var(--surface-2);
+  border-color: #d6cfc5;
+}
+.dashboard-theme {
+  color: var(--text);
+  background: var(--canvas);
+}
+.dashboard-theme input,
+.dashboard-theme select,
+.dashboard-theme textarea {
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--text);
+}
+.dashboard-theme input::placeholder {
+  color: #707789;
+}
+.dashboard-theme table thead {
+  background: var(--surface-2) !important;
+  color: var(--muted) !important;
+}
+.guest-shell {
+  background: var(--canvas);
+  color: var(--text);
+}
+.guest-shell input {
+  background: white;
+  border-color: var(--line);
+  color: var(--text);
+}
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-3) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.photo-reveal {
+  animation: photo-reveal 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.booth-shell .glass {
+  background: white;
+  border-color: var(--line);
+  color: var(--text);
+}
+.booth-shell [class*='text-white/'] {
+  color: var(--muted) !important;
+}
+.booth-shell input {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+}
+@keyframes photo-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    clip-path: inset(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media print {
+  .dashboard-nav,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+    color: black;
+  }
+}

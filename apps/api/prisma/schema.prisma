@@ -1,0 +1,432 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+enum PlatformRole {
+  SUPER_ADMIN
+  USER
+}
+enum StudioRole {
+  OWNER
+  ADMIN
+  PHOTOGRAPHER
+}
+enum EventType {
+  WEDDING
+  RECEPTION
+  BIRTHDAY
+  CORPORATE
+  OTHER
+}
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  ARCHIVED
+  DELETING
+}
+enum PhotoStatus {
+  PENDING
+  UPLOADING
+  UPLOADED
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  DELETED
+}
+enum JobType {
+  PHOTO_PROCESS
+  THUMBNAIL_GENERATE
+  PHOTO_DELETE
+  EVENT_DELETE
+  ZIP_EXPORT
+  SELFIE_SEARCH
+}
+enum UploadStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  FAILED
+  CANCELLED
+}
+enum JobStatus {
+  PENDING
+  ACTIVE
+  RETRYING
+  COMPLETED
+  FAILED
+  DEAD_LETTER
+}
+enum GuestSessionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+enum SearchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+enum DownloadJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+enum ConsentType {
+  BIOMETRIC_PROCESSING
+  PRIVACY_NOTICE
+  TERMS
+}
+enum AuditActorType {
+  USER
+  GUEST_SESSION
+  SYSTEM
+}
+model User {
+  id                  String   @id @default(uuid()) @db.Uuid
+  email               String   @unique @db.VarChar(320)
+  passwordHash        String
+  displayName         String   @db.VarChar(120)
+  platformRole        PlatformRole @default(USER)
+  emailVerifiedAt     DateTime?
+  disabledAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  memberships         StudioMember[]
+  refreshSessions     RefreshSession[]
+  passwordResetTokens PasswordResetToken[]
+  auditLogs           AuditLog[] @relation("UserAuditLogs")
+  uploadSessions      UploadSession[]
+}
+model Studio {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(160)
+  slug        String   @unique @db.VarChar(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     StudioMember[]
+  events      Event[]
+  auditLogs   AuditLog[]
+  downloadLogs DownloadLog[]
+}
+model StudioMember {
+  id        String @id @default(uuid()) @db.Uuid
+  studioId  String @db.Uuid
+  userId    String @db.Uuid
+  role      StudioRole
+  createdAt DateTime @default(now())
+  studio    Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([studioId, userId])
+  @@index([studioId])
+  @@index([userId])
+}
+model Event {
+  id          String @id @default(uuid()) @db.Uuid
+  studioId    String @db.Uuid
+  title       String @db.VarChar(180)
+  type        EventType
+  description String? @db.Text
+  eventDate   DateTime
+  location    String? @db.VarChar(240)
+  coverPhotoId String? @unique @db.Uuid
+  status      EventStatus @default(DRAFT)
+  publicSlug  String @unique @db.VarChar(120)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  studio      Studio @relation(fields: [studioId], references: [id], onDelete: Restrict)
+  settings    EventSettings?
+  photos      Photo[] @relation("EventPhotos")
+  coverPhoto  Photo? @relation("EventCoverPhoto", fields: [coverPhotoId], references: [id], onDelete: SetNull)
+  jobs        ProcessingJob[]
+  guestSessions GuestSession[]
+  searches    PhotoSearch[]
+  downloadJobs GuestDownloadJob[]
+  embeddings  FaceEmbedding[]
+  auditLogs   AuditLog[]
+  uploadSessions UploadSession[]
+  @@index([studioId])
+  @@index([studioId, status])
+}
+model EventSettings {
+  id                    String @id @default(uuid()) @db.Uuid
+  eventId               String @unique @db.Uuid
+  accessEnabled         Boolean @default(false)
+  accessPinHash         String?
+  accessExpiresAt       DateTime?
+  downloadsEnabled      Boolean @default(true)
+  downloadAllEnabled    Boolean @default(false)
+  retentionDays         Int @default(90)
+  selfieRetentionMinutes Int @default(0)
+  searchResultTtlMinutes Int @default(60)
+  similarityThreshold   Decimal @default(0.62) @db.Decimal(4, 3)
+  consentVersion        String @default("1.0") @db.VarChar(32)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  event                 Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+model Photo {
+  id              String @id @default(uuid()) @db.Uuid
+  eventId         String @db.Uuid
+  originalKey     String @unique
+  thumbnailKey    String?
+  previewKey      String?
+  aiInputKey      String?
+  originalFilename String
+  originalFormat  String? @db.VarChar(16)
+  derivativeStatus String @default("PENDING") @db.VarChar(32)
+  mimeType        String @db.VarChar(100)
+  byteSize        BigInt
+  width           Int?
+  height          Int?
+  sha256          String @db.Char(64)
+  status          PhotoStatus @default(PENDING)
+  failureCode     String?
+  failureMessage  String?
+  processedAt     DateTime?
+  faceCount       Int?
+  skippedFaceCount Int?
+  modelVersion    String? @db.VarChar(80)
+  processingDurationMs Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+  event           Event @relation("EventPhotos", fields: [eventId], references: [id], onDelete: Cascade)
+  coveredEvent    Event? @relation("EventCoverPhoto")
+  embeddings      FaceEmbedding[]
+  jobs            ProcessingJob[]
+  searchResults   SearchResult[]
+  downloadLogs    DownloadLog[]
+  uploadSession   UploadSession?
+  @@unique([eventId, sha256])
+  @@index([eventId])
+  @@index([eventId, status])
+  @@index([eventId, modelVersion, status])
+}
+model UploadSession {
+  id               String @id @default(uuid()) @db.Uuid
+  eventId          String @db.Uuid
+  requestedById    String @db.Uuid
+  objectKey        String @unique
+  originalFilename String
+  mimeType         String @db.VarChar(100)
+  byteSize         BigInt
+  sha256           String @db.Char(64)
+  idempotencyKey   String @unique @db.VarChar(128)
+  status           UploadStatus @default(PENDING)
+  expiresAt        DateTime
+  completedAt      DateTime?
+  photoId          String? @unique @db.Uuid
+  failureCode      String? @db.VarChar(80)
+  uploadMode       String @default("SINGLE") @db.VarChar(16)
+  multipartUploadId String? @db.VarChar(512)
+  partSize         Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  event            Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  requestedBy      User @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  photo            Photo? @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  @@unique([eventId, sha256, status])
+  @@index([eventId, status])
+  @@index([expiresAt, status])
+  @@index([requestedById])
+}
+model FaceEmbedding {
+  id          String @id @default(uuid()) @db.Uuid
+  eventId     String @db.Uuid
+  photoId     String @db.Uuid
+  faceIndex   Int
+  modelName   String @db.VarChar(100)
+  modelVersion String @db.VarChar(50)
+  embedding   Unsupported("vector(512)")
+  boundingBox Json
+  detectionConfidence Decimal @db.Decimal(6, 5)
+  qualityScore Decimal? @db.Decimal(6, 5)
+  qualityStatus String @default("ACCEPTED") @db.VarChar(32)
+  processedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  photo       Photo @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  @@unique([photoId, faceIndex, modelName, modelVersion])
+  @@index([eventId])
+  @@index([eventId, modelVersion])
+  @@index([photoId])
+}
+model ProcessingJob {
+  id          String @id @default(uuid()) @db.Uuid
+  eventId     String @db.Uuid
+  photoId     String? @db.Uuid
+  type        JobType
+  status      JobStatus @default(PENDING)
+  queueJobId  String? @unique
+  idempotencyKey String @unique
+  attempts    Int @default(0)
+  maxAttempts Int @default(5)
+  payload     Json
+  error       Json?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  photo       Photo? @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  @@index([eventId])
+  @@index([status, createdAt])
+}
+model GuestSession {
+  id          String @id @default(uuid()) @db.Uuid
+  eventId     String @db.Uuid
+  tokenHash   String @unique @db.Char(64)
+  status      GuestSessionStatus @default(ACTIVE)
+  expiresAt   DateTime
+  lastSeenAt  DateTime @default(now())
+  ipHash      String? @db.Char(64)
+  userAgentHash String? @db.Char(64)
+  createdAt   DateTime @default(now())
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  consents    GuestConsent[]
+  searches    PhotoSearch[]
+  downloadLogs DownloadLog[]
+  downloadJobs GuestDownloadJob[]
+  auditLogs   AuditLog[] @relation("GuestAuditLogs")
+  @@index([eventId])
+  @@index([expiresAt])
+}
+model GuestConsent {
+  id             String @id @default(uuid()) @db.Uuid
+  guestSessionId String @db.Uuid
+  type           ConsentType
+  version        String @db.VarChar(32)
+  grantedAt      DateTime @default(now())
+  withdrawnAt    DateTime?
+  noticeSnapshot Json
+  guestSession   GuestSession @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+  @@index([guestSessionId])
+}
+model PhotoSearch {
+  id             String @id @default(uuid()) @db.Uuid
+  eventId        String @db.Uuid
+  guestSessionId String @db.Uuid
+  status         SearchStatus @default(PENDING)
+  selfieObjectKey String?
+  threshold      Decimal @db.Decimal(4, 3)
+  faceCount      Int?
+  modelVersion   String? @db.VarChar(80)
+  failureCode    String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+  event          Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guestSession   GuestSession @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+  results        SearchResult[]
+  downloadLogs   DownloadLog[]
+  downloadJobs   GuestDownloadJob[]
+  @@index([eventId])
+  @@index([guestSessionId])
+  @@index([expiresAt])
+}
+model SearchResult {
+  id         String @id @default(uuid()) @db.Uuid
+  searchId   String @db.Uuid
+  photoId    String @db.Uuid
+  similarity Decimal @db.Decimal(7, 6)
+  rank       Int
+  createdAt  DateTime @default(now())
+  search     PhotoSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  photo      Photo @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  @@unique([searchId, photoId])
+  @@index([searchId, rank])
+}
+model GuestDownloadJob {
+  id             String @id @default(uuid()) @db.Uuid
+  eventId        String @db.Uuid
+  guestSessionId String @db.Uuid
+  searchId       String @db.Uuid
+  status         DownloadJobStatus @default(PENDING)
+  queueJobId     String? @unique
+  objectKey      String? @unique
+  totalPhotos    Int
+  estimatedBytes BigInt
+  byteSize       BigInt?
+  failureCode    String? @db.VarChar(80)
+  selectedPhotoIds Json?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  event          Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guestSession   GuestSession @relation(fields: [guestSessionId], references: [id], onDelete: Cascade)
+  search         PhotoSearch @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  @@index([guestSessionId, status])
+  @@index([expiresAt, status])
+  @@index([searchId])
+}
+model DownloadLog {
+  id             String @id @default(uuid()) @db.Uuid
+  studioId       String @db.Uuid
+  guestSessionId String? @db.Uuid
+  searchId       String? @db.Uuid
+  photoId        String @db.Uuid
+  downloadedAt   DateTime @default(now())
+  studio         Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  guestSession   GuestSession? @relation(fields: [guestSessionId], references: [id], onDelete: SetNull)
+  search         PhotoSearch? @relation(fields: [searchId], references: [id], onDelete: SetNull)
+  photo          Photo @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  @@index([studioId, downloadedAt])
+  @@index([guestSessionId])
+}
+model AuditLog {
+  id             String @id @default(uuid()) @db.Uuid
+  studioId       String? @db.Uuid
+  eventId        String? @db.Uuid
+  userId         String? @db.Uuid
+  guestSessionId String? @db.Uuid
+  actorType      AuditActorType
+  action         String @db.VarChar(120)
+  resourceType   String @db.VarChar(80)
+  resourceId     String?
+  metadata       Json?
+  ipHash         String? @db.Char(64)
+  createdAt      DateTime @default(now())
+  studio         Studio? @relation(fields: [studioId], references: [id], onDelete: SetNull)
+  event          Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  user           User? @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: SetNull)
+  guestSession   GuestSession? @relation("GuestAuditLogs", fields: [guestSessionId], references: [id], onDelete: SetNull)
+  @@index([studioId, createdAt])
+  @@index([eventId, createdAt])
+}
+model RefreshSession {
+  id          String @id @default(uuid()) @db.Uuid
+  userId      String @db.Uuid
+  tokenHash   String @unique @db.Char(64)
+  familyId    String @db.Uuid
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  replacedById String? @db.Uuid
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime?
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+model PasswordResetToken {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  tokenHash String @unique @db.Char(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}

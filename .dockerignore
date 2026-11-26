@@ -1,0 +1,8 @@
+.git
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/.env
+services/face-ai/.venv
+services/face-ai/models
