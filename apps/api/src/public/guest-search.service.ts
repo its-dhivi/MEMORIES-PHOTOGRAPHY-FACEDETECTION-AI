@@ -155,8 +155,7 @@ export class GuestSearchService {
     const session = await this.requireSession(token, slug, true);
     if (!file?.buffer?.length) throw new BadRequestException('A selfie is required');
     const settings = session.event.settings!;
-    if (!settings.matchingApprovedAt)
-      throw new ForbiddenException('Face matching is awaiting event approval');
+    await this.assertPublicMatchingAvailable(settings.faceMatchingEnabled === true);
     const threshold = Number(settings.similarityThreshold);
     const search = await this.prisma.photoSearch.create({
       data: {
@@ -169,12 +168,7 @@ export class GuestSearchService {
     });
     try {
       const analysis = await this.ai.embedSelfie(file.buffer, file.mimetype, file.originalname);
-      if (
-        settings.matchingModelVersion !== analysis.modelVersion ||
-        settings.matchingPreprocessingVersion !== analysis.preprocessingVersion
-      ) {
-        throw new ForbiddenException('Approved face matching pipeline is no longer active');
-      }
+      this.assertAnalysisIsValidated(analysis.modelVersion, analysis.preprocessingVersion);
       const embedding = analysis.faces[0]?.embedding;
       if (!embedding) throw new BadRequestException('Selfie did not contain a usable face');
       const vector = `[${embedding.join(',')}]`;
@@ -242,6 +236,38 @@ export class GuestSearchService {
         },
       });
       throw error;
+    }
+  }
+
+  private async assertPublicMatchingAvailable(eventEnabled: boolean) {
+    if (
+      !eventEnabled ||
+      !this.config.get<boolean>('PUBLIC_FACE_MATCHING_ENABLED', false) ||
+      !this.config.get<boolean>('PUBLIC_FACE_MATCHING_MODEL_VALIDATED', false)
+    )
+      throw new ForbiddenException('Public face matching is unavailable');
+    const model = await this.ai.readiness();
+    if (!model.ready) throw new ForbiddenException('Recognition model is unavailable');
+    const expectedModel = this.config.get<string>('FACE_MODEL_VERSION');
+    const expectedPreprocessing = this.config.get<string>('FACE_PREPROCESSING_VERSION');
+    if (
+      !expectedModel ||
+      !expectedPreprocessing ||
+      model.modelVersion !== expectedModel ||
+      model.preprocessingVersion !== expectedPreprocessing
+    )
+      throw new ForbiddenException(
+        'System validated recognition model does not match the active model',
+      );
+  }
+
+  private assertAnalysisIsValidated(modelVersion: string, preprocessingVersion: string) {
+    const expectedModel = this.config.get<string>('FACE_MODEL_VERSION');
+    const expectedPreprocessing = this.config.get<string>('FACE_PREPROCESSING_VERSION');
+    if (modelVersion !== expectedModel || preprocessingVersion !== expectedPreprocessing) {
+      throw new ForbiddenException(
+        'System validated recognition model does not match the active model',
+      );
     }
   }
 

@@ -114,13 +114,21 @@ export const eventsApi = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
-  approveMatching: (id: string, input: Record<string, unknown>) =>
-    apiRequest<EventSettings>(`/events/${id}/settings/approve-matching`, {
-      method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  revokeMatching: (id: string) =>
-    apiRequest<EventSettings>(`/events/${id}/settings/revoke-matching`, { method: 'POST' }),
+  privateSearch: (id: string, selfie: File) => {
+    const body = new FormData();
+    body.append('selfie', selfie);
+    body.append('consent', 'true');
+    return apiRequest<{
+      status: string;
+      threshold: number;
+      results: Array<{
+        photoId: string;
+        filename: string;
+        similarity: number;
+        previewUrl: string | null;
+      }>;
+    }>(`/events/${id}/matching/private-search`, { method: 'POST', body });
+  },
   qr: (id: string) => apiRequest<QrAssets>(`/events/${id}/qr`),
 };
 

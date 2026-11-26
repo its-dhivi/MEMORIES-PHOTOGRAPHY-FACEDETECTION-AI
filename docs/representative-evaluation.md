@@ -28,18 +28,10 @@ python services/face-ai/scripts/evaluate_gallery.py private-eval/scores.jsonl `
 
 Choose the candidate threshold using calibration rows only and the documented business risk target; freeze it before evaluating. Evaluate every query against the full event gallery. Do not use pairwise metrics as a replacement for gallery-level results. `services/face-ai/scripts/evaluate_detection.py` separately measures face-box detection against manually labeled boxes. Retain all rejected images and tag failure reasons so detection, alignment, and quality filtering can be distinguished.
 
-## Production approval artifact
+## System-level guest release
 
-Production approval requires a trusted HMAC signature bound to the event ID, threshold, model/preprocessing versions, source label, and evaluation result summary. It also requires at least three held-out events and 1,000 evaluation queries, photo-precision 95% Wilson lower bound of at least 99%, photo recall of at least 50%, and a query-level false-acceptance 95% Wilson upper bound no greater than 0.1%. These are conservative software gates, not a legal or safety guarantee; counsel and the operator must approve them before launch. The interval is query-level, so final evidence should also include event/person cluster uncertainty.
-
-Create a private wrapper JSON containing `eventId`, `threshold`, `modelVersion`, `preprocessingVersion`, `source`, and `evaluationResults` (the evaluator's `reports.evaluation` summary). The trusted evaluation signer must hold the production `EVALUATION_SIGNING_SECRET` outside the browser and app logs:
-
-```sh
-node scripts/sign-evaluation-artifact.mjs private-eval/approval.json
-```
-
-The dashboard accepts the resulting `.signed.json`. API verification checks the signature in constant time and repeats the gallery-level acceptance checks, so direct unsigned API calls cannot set production approval. Keep the signing secret restricted to the trusted signer/host; rotate it after suspected exposure. Never fabricate labels or metrics to pass the gate.
+There is no event-level evaluation upload, signature, or technical approval step. Event owners and admins can use private search immediately. Public guest matching is a separate system-level feature and remains disabled unless both `PUBLIC_FACE_MATCHING_MODEL_VALIDATED=true` and `PUBLIC_FACE_MATCHING_ENABLED=true` are configured. Set the validation flag only after an authorized operator reviews real, consented, manually labeled, gallery-level results on independent evaluation data, quality failure analysis, confidence intervals, and legal/privacy controls. Never infer the validation flag from synthetic benchmark metrics or invent evaluation results. Event owners then opt in or out with the event's simple face-matching toggle.
 
 ## Limitations and release gate
 
-The current deliverable is a local CLI, not a web upload or annotation screen. No consented event set was supplied, so it was not run against real wedding data. Operator access is enforced operationally by OS volume ACLs and an offline workspace; a multi-user hosted annotation workflow needs a separate authenticated feature with audit trails and deletion controls before being offered to customers. Query-level Wilson intervals do not model correlation by person/event; use event/identity cluster bootstrap for a final large evaluation. Report sample sizes and uncertainty for every subgroup. Keep public matching unapproved until counsel review, independent representative evaluation, event approval, and operational privacy controls are satisfied.
+The current deliverable is a local CLI, not a hosted annotation workflow. No consented event set was supplied, so real-world accuracy remains unvalidated. Query-level Wilson intervals do not model correlation by person/event; use event/identity cluster bootstrap for a final large evaluation. Report sample sizes and uncertainty for every subgroup. Public matching remains disabled until system-level validation and appropriate privacy/legal review are complete.

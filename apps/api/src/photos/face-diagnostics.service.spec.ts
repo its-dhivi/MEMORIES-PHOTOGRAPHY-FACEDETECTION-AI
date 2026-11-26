@@ -34,9 +34,6 @@ describe('FaceDiagnosticsService', () => {
           event: {
             settings: {
               similarityThreshold: 0.64,
-              matchingApprovedAt: new Date(),
-              matchingModelVersion: 'auraface-v1',
-              matchingPreprocessingVersion: 'auraface-rgb-112-v1',
             },
           },
         }),
@@ -72,9 +69,6 @@ describe('FaceDiagnosticsService', () => {
           event: {
             settings: {
               similarityThreshold: 0.64,
-              matchingApprovedAt: new Date(),
-              matchingModelVersion: 'auraface-v1',
-              matchingPreprocessingVersion: 'auraface-rgb-112-v1',
             },
           },
         }),

@@ -169,6 +169,8 @@ model EventSettings {
   selfieRetentionMinutes Int @default(0)
   searchResultTtlMinutes Int @default(60)
   similarityThreshold   Decimal @default(0.64) @db.Decimal(4, 3)
+  faceMatchingEnabled Boolean @default(false)
+  // Legacy event approval metadata retained for existing database records; not read by current matching paths.
   previousSimilarityThreshold Decimal? @db.Decimal(4, 3)
   matchingApprovedAt    DateTime?
   matchingApprovedById  String? @db.Uuid

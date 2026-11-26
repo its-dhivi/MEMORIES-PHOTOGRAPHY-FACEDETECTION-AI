@@ -18,19 +18,23 @@ export default function EventSettingsPage() {
   const [accessEnabled, setAccessEnabled] = useState<boolean>();
   const [downloadsEnabled, setDownloadsEnabled] = useState<boolean>();
   const [downloadAllEnabled, setDownloadAllEnabled] = useState<boolean>();
+  const [faceMatchingEnabled, setFaceMatchingEnabled] = useState<boolean>();
+  const [similarityThreshold, setSimilarityThreshold] = useState<number>();
+  const [privateSelfie, setPrivateSelfie] = useState<File>();
+  const [privateSearchConsent, setPrivateSearchConsent] = useState(false);
+  const [privateResults, setPrivateResults] = useState<{
+    threshold: number;
+    results: Array<{
+      photoId: string;
+      filename: string;
+      similarity: number;
+      previewUrl: string | null;
+    }>;
+  }>();
   const [retentionDays, setRetentionDays] = useState<number>();
   const [accessPin, setAccessPin] = useState('');
   const [clearPin, setClearPin] = useState(false);
   const [status, setStatus] = useState<string>();
-  const [calibration, setCalibration] = useState<{
-    threshold: number;
-    modelVersion: string;
-    preprocessingVersion: string;
-    source: string;
-    evaluationResults: Record<string, unknown>;
-    evidenceSignature: string;
-  }>();
-  const [calibrationError, setCalibrationError] = useState<string>();
   const updateEvent = useMutation({
     mutationFn: (values: EventFormValues) =>
       eventsApi.update(eventId, {
@@ -46,6 +50,9 @@ export default function EventSettingsPage() {
         accessEnabled: accessEnabled ?? settings.data?.accessEnabled,
         downloadsEnabled: downloadsEnabled ?? settings.data?.downloadsEnabled,
         downloadAllEnabled: downloadAllEnabled ?? settings.data?.downloadAllEnabled,
+        faceMatchingEnabled: faceMatchingEnabled ?? settings.data?.faceMatchingEnabled,
+        similarityThreshold:
+          similarityThreshold ?? Number(settings.data?.similarityThreshold ?? 0.64),
         retentionDays: retentionDays ?? settings.data?.retentionDays,
         ...(accessPin ? { accessPin } : {}),
         ...(clearPin ? { clearAccessPin: true } : {}),
@@ -56,43 +63,10 @@ export default function EventSettingsPage() {
     mutationFn: () => eventsApi.remove(eventId),
     onSuccess: () => router.replace('/dashboard/events'),
   });
-  const approveMatching = useMutation({
-    mutationFn: () => eventsApi.approveMatching(eventId, calibration!),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['event', eventId, 'settings'] }),
+  const privateSearch = useMutation({
+    mutationFn: () => eventsApi.privateSearch(eventId, privateSelfie!),
+    onSuccess: (response) => setPrivateResults(response),
   });
-  const revokeMatching = useMutation({
-    mutationFn: () => eventsApi.revokeMatching(eventId),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['event', eventId, 'settings'] }),
-  });
-  async function loadCalibration(file?: File) {
-    if (!file) return;
-    try {
-      const artifact = JSON.parse(await file.text()) as Record<string, unknown>;
-      if (
-        typeof artifact.threshold !== 'number' ||
-        typeof artifact.modelVersion !== 'string' ||
-        typeof artifact.preprocessingVersion !== 'string' ||
-        typeof artifact.source !== 'string' ||
-        typeof artifact.evidenceSignature !== 'string' ||
-        !artifact.evaluationResults ||
-        typeof artifact.evaluationResults !== 'object'
-      ) {
-        throw new Error('Upload a signed evaluation artifact prepared by a trusted operator.');
-      }
-      setCalibration({
-        threshold: artifact.threshold,
-        modelVersion: artifact.modelVersion,
-        preprocessingVersion: artifact.preprocessingVersion,
-        source: artifact.source,
-        evaluationResults: artifact.evaluationResults as Record<string, unknown>,
-        evidenceSignature: artifact.evidenceSignature,
-      });
-      setCalibrationError(undefined);
-    } catch (error) {
-      setCalibration(undefined);
-      setCalibrationError(error instanceof Error ? error.message : 'Invalid calibration report');
-    }
-  }
   if (event.isLoading || settings.isLoading)
     return <div className="h-96 animate-pulse rounded-xl bg-stone-200" />;
   if (!event.data)
@@ -140,68 +114,91 @@ export default function EventSettingsPage() {
         </section>
         <section className="space-y-6">
           <div className="rounded-xl border bg-white p-6">
-            <h3 className="font-serif text-2xl">Face matching approval</h3>
+            <h3 className="font-serif text-2xl">Face matching</h3>
             <p className="mt-2 text-sm text-slate-600">
-              Guest matching stays unavailable until an owner or admin approves a signed gallery
-              evaluation for this event and model version. Production approval checks held-out
-              event/query counts, a precision confidence bound, recall, and false matches per guest
-              search.
+              Owners and administrators can run private event-scoped selfie searches. Public guest
+              matching additionally requires system-level model validation.
             </p>
-            <p className="mt-3 text-sm">
-              Status: {settings.data?.matchingApprovedAt ? 'Approved' : 'Awaiting approval'}
+            <label className="mt-4 flex items-center justify-between gap-3 text-sm">
+              <span>Enable Face Matching</span>
+              <input
+                type="checkbox"
+                checked={faceMatchingEnabled ?? settings.data?.faceMatchingEnabled ?? false}
+                onChange={(e) => setFaceMatchingEnabled(e.target.checked)}
+                className="h-5 w-5 accent-charcoal"
+              />
+            </label>
+            <label className="mt-4 block text-sm">
+              Similarity threshold
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value={similarityThreshold ?? Number(settings.data?.similarityThreshold ?? 0.64)}
+                onChange={(e) => setSimilarityThreshold(Number(e.target.value))}
+                className="mt-2 h-11 w-full rounded-lg border px-3"
+              />
+            </label>
+            <h4 className="mt-6 border-t pt-5 text-lg font-medium">Private event search</h4>
+            <p className="mt-1 text-sm text-slate-500">
+              Upload a selfie you are authorized to use. It is processed in memory and not retained.
             </p>
-            <p className="text-sm">Threshold: {settings.data?.similarityThreshold ?? 'not set'}</p>
-            {settings.data?.matchingApprovedAt ? (
-              <button
-                className="mt-4 rounded bg-red-700 px-4 py-2 text-sm text-white"
-                disabled={revokeMatching.isPending}
-                onClick={() => {
-                  if (window.confirm('Disable guest face matching for this event?'))
-                    revokeMatching.mutate();
-                }}
-              >
-                Revoke approval and disable matching
-              </button>
-            ) : (
-              <div className="mt-4 space-y-3">
-                <label className="block text-sm">
-                  Signed gallery evaluation artifact (JSON)
-                  <input
-                    className="mt-2 block w-full"
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={(event) => void loadCalibration(event.target.files?.[0])}
-                  />
-                </label>
-                {calibration && (
-                  <p className="text-sm">
-                    Proposed {calibration.threshold.toFixed(3)} from {calibration.source}
-                  </p>
-                )}
-                <button
-                  className="rounded bg-charcoal px-4 py-2 text-sm text-white disabled:opacity-50"
-                  disabled={!calibration || approveMatching.isPending}
-                  onClick={() => {
-                    if (window.confirm('Approve this threshold for guest searches in this event?'))
-                      approveMatching.mutate();
-                  }}
-                >
-                  Approve threshold
-                </button>
-              </div>
-            )}
-            {(calibrationError || approveMatching.error || revokeMatching.error) && (
+            <input
+              className="mt-3 block w-full text-sm"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => {
+                setPrivateSelfie(e.target.files?.[0]);
+                setPrivateResults(undefined);
+              }}
+            />
+            <label className="mt-3 flex gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={privateSearchConsent}
+                onChange={(e) => setPrivateSearchConsent(e.target.checked)}
+              />
+              I have permission to process this selfie for this event search.
+            </label>
+            <button
+              className="mt-4 rounded bg-charcoal px-4 py-2 text-sm text-white disabled:opacity-50"
+              disabled={!privateSelfie || !privateSearchConsent || privateSearch.isPending}
+              onClick={() => privateSearch.mutate()}
+            >
+              {privateSearch.isPending ? 'Searching…' : 'Search event photos privately'}
+            </button>
+            {privateSearch.error && (
               <p role="alert" className="mt-3 text-sm text-red-700">
-                {calibrationError ??
-                  approveMatching.error?.message ??
-                  revokeMatching.error?.message}
+                {privateSearch.error.message}
               </p>
+            )}
+            {privateResults && (
+              <div className="mt-4 space-y-3" aria-live="polite">
+                <p className="text-sm">
+                  {privateResults.results.length} matching photos at threshold{' '}
+                  {privateResults.threshold.toFixed(2)}
+                </p>
+                {privateResults.results.map((result) => (
+                  <div key={result.photoId} className="flex items-center gap-3 rounded border p-2">
+                    {result.previewUrl && (
+                      <img
+                        src={result.previewUrl}
+                        alt="Matching event photo"
+                        className="h-16 w-20 rounded object-cover"
+                      />
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-sm">{result.filename}</span>
+                    <span className="text-sm">{result.similarity.toFixed(3)}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
           <div className="rounded-xl border bg-white p-6">
             <h3 className="font-serif text-2xl">Guest access</h3>
             <p className="mt-1 text-sm text-slate-500">
-              These controls are enforced across the landing page, selfie search, and downloads.
+              Access, search and download settings are enforced across guest-facing workflows.
             </p>
             <label className="mt-5 flex items-center justify-between gap-3 text-sm">
               <span>Enable public event access</span>
@@ -271,7 +268,7 @@ export default function EventSettingsPage() {
               disabled={updateSettings.isPending}
               className="mt-6 rounded-lg bg-charcoal px-4 py-2.5 text-sm text-white"
             >
-              Save access settings
+              Save settings
             </button>
             {updateSettings.isSuccess && (
               <span className="ml-3 text-sm text-emerald-700">Saved</span>

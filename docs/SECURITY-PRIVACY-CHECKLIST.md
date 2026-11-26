@@ -27,7 +27,7 @@ Use this checklist with the [security review](PRODUCTION-SECURITY-REVIEW.md) and
 - [ ] Verify face search is event-scoped with no cross-event identity tracking or unauthorized sharing.
 - [ ] Test deletion of selfies/session data, search results, embeddings, evaluation artifacts and event data under the approved policy.
 - [ ] Limit and audit access to consented evaluation photos and labels; do not infer ground truth from model predictions.
-- [ ] Keep public event matching disabled until the exact model license, representative gallery evaluation, threshold calibration and signed event approval are satisfied.
+- [ ] Keep public face matching disabled until exact model licensing, representative gallery evaluation, threshold calibration and system-level validation are satisfied; then enable only per event as requested.
 
 ## Operations and legal review
 

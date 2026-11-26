@@ -15,7 +15,6 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { StudioContextService } from '../common/studio-context.service';
 import {
-  ApproveMatchingDto,
   CreateEventDto,
   ListEventsDto,
   UpdateEventDto,
@@ -91,21 +90,5 @@ export class EventsController {
     @Body() input: UpdateEventSettingsDto,
   ) {
     return this.events.updateSettings(user.id, id, input);
-  }
-
-  @Post(':id/settings/approve-matching')
-  @ApiOperation({ summary: 'Approve a validated event face matching threshold' })
-  approveMatching(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
-    @Body() input: ApproveMatchingDto,
-  ) {
-    return this.events.approveMatching(user.id, id, input);
-  }
-
-  @Post(':id/settings/revoke-matching')
-  @ApiOperation({ summary: 'Disable event matching and restore its previous threshold' })
-  revokeMatching(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.events.revokeMatching(user.id, id);
   }
 }

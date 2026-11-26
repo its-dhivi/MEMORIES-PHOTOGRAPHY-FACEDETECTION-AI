@@ -27,4 +27,4 @@ Phase 5.2A compared AuraFace v1 with OpenCV Zoo SFace 2021dec on 300 synthetic C
 
 SFace is the provisional candidate for further evaluation, not selected for production. Neither precision result is acceptable evidence for public guest matching. Its OpenCV Zoo model directory publishes Apache-2.0 terms for the artifact; repository code licensing and training-data rights are separate questions. Preserve exact artifact checksum/provenance and obtain legal review before commercial deployment. Compare on consented event imagery with event/person holdouts and gallery-level false matches before migration.
 
-Production AuraFace, thresholds and event approval gates remain unchanged. See [Phase 5.2 benchmark](phase5.2-model-benchmark.md) and [Phase 5.1 validation](phase5.1-recognition-validation.md).
+This is a provisional model decision only. Public matching is protected by system-level model-validation flags and an event-level Enable Face Matching switch. Private owner/admin search does not depend on per-event approval. See [Phase 5.2 benchmark](phase5.2-model-benchmark.md) and [Phase 5.1 validation](phase5.1-recognition-validation.md).

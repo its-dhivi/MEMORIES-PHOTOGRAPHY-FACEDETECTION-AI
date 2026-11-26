@@ -18,8 +18,8 @@ Keep PostgreSQL, Redis, RustFS administration, API, web, and face-AI on the priv
 - Create events under the correct studio/tenant, set access PIN and download settings, and review the public slug before issuing a QR code.
 - Confirm detector and recognition model readiness and version compatibility before indexing. Reindexing should use a reviewed, resumable migration plan with a backup and rollback path.
 - Review photo diagnostics only for events you are authorized to operate. Labels used in evaluation must be manually assigned from consented evidence; predictions are never ground truth.
-- Production event approval requires a trusted signed gallery evaluation artifact. Do not construct metrics manually or share the signing secret with browsers, photographers, or ordinary API clients.
-- Keep approval disabled for unvalidated events. Candidate model embeddings must remain version-isolated and must not appear in guest results.
+- Event owners and administrators can run a private selfie search from event settings. Use only selfies you have permission to process; the API rate limits requests, scopes results to that event, and does not persist the selfie.
+- The event toggle controls public guest matching. Guest search additionally requires system-level model validation and the global public-matching flag; keep those system flags off until representative, consented evaluation and review are complete. Candidate model embeddings remain version-isolated.
 
 ## Privacy requests and incidents
 

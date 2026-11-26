@@ -99,12 +99,8 @@ export class FaceDiagnosticsService {
     const similarity = matches[0]?.similarity ?? null;
     const threshold = Number(photo.event.settings?.similarityThreshold ?? 0.64);
     const resultLimit = this.config.get<number>('FACE_MATCH_MAX_RESULTS', 1000);
-    const approved =
-      Boolean(photo.event.settings?.matchingApprovedAt) &&
-      photo.event.settings?.matchingModelVersion === analysis.modelVersion &&
-      photo.event.settings?.matchingPreprocessingVersion === analysis.preprocessingVersion;
     let candidateRank: number | null = null;
-    if (photo.status === 'READY' && approved && similarity !== null && similarity >= threshold) {
+    if (photo.status === 'READY' && similarity !== null && similarity >= threshold) {
       const rankRows = await this.prisma.$queryRaw<{ preceding: bigint }[]>(Prisma.sql`
         SELECT COUNT(*)::bigint AS preceding FROM (
           SELECT fe."photoId", MAX(1 - (fe.embedding <=> ${vector}::vector)) AS score
@@ -124,7 +120,6 @@ export class FaceDiagnosticsService {
     }
     const accepted =
       photo.status === 'READY' &&
-      approved &&
       similarity !== null &&
       similarity >= threshold &&
       candidateRank !== null &&
@@ -134,13 +129,11 @@ export class FaceDiagnosticsService {
         ? 'INDEXING_FAILURE'
         : similarity === null
           ? 'NO_COMPATIBLE_EMBEDDING'
-          : !approved
-            ? 'MATCHING_NOT_APPROVED'
-            : similarity < threshold
-              ? 'SIMILARITY_REJECTION'
-              : candidateRank !== null && candidateRank > resultLimit
-                ? 'CANDIDATE_LIMIT'
-                : 'ACCEPTED';
+          : similarity < threshold
+            ? 'SIMILARITY_REJECTION'
+            : candidateRank !== null && candidateRank > resultLimit
+              ? 'CANDIDATE_LIMIT'
+              : 'ACCEPTED';
     await this.prisma.auditLog.create({
       data: {
         studioId,

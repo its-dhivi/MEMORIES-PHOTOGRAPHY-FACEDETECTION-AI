@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EventStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../infrastructure/storage.service';
@@ -10,6 +11,7 @@ export class PublicEventsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly ai: AiService,
+    private readonly config: ConfigService,
   ) {}
 
   async get(slug: string) {
@@ -30,9 +32,8 @@ export class PublicEventsService {
             accessExpiresAt: true,
             accessPinHash: true,
             consentVersion: true,
-            matchingApprovedAt: true,
-            matchingModelVersion: true,
-            matchingPreprocessingVersion: true,
+            faceMatchingEnabled: true,
+            similarityThreshold: true,
           },
         },
         coverPhoto: { select: { previewKey: true, thumbnailKey: true } },
@@ -46,10 +47,13 @@ export class PublicEventsService {
       (!event.settings?.accessExpiresAt || event.settings.accessExpiresAt > now);
     const coverKey = event.coverPhoto?.previewKey ?? event.coverPhoto?.thumbnailKey;
     const model = await this.ai.readiness();
-    const approved =
-      Boolean(event.settings?.matchingApprovedAt) &&
-      event.settings?.matchingModelVersion === model.modelVersion &&
-      event.settings?.matchingPreprocessingVersion === model.preprocessingVersion;
+    const modelValidated =
+      this.config.get<boolean>('PUBLIC_FACE_MATCHING_MODEL_VALIDATED', false) &&
+      this.config.get<boolean>('PUBLIC_FACE_MATCHING_ENABLED', false) &&
+      Boolean(this.config.get<string>('FACE_MODEL_VERSION')) &&
+      model.modelVersion === this.config.get<string>('FACE_MODEL_VERSION') &&
+      model.preprocessingVersion === this.config.get<string>('FACE_PREPROCESSING_VERSION');
+    const approved = Boolean(event.settings?.faceMatchingEnabled) && modelValidated;
     return {
       title: event.title,
       type: event.type,
@@ -67,7 +71,7 @@ export class PublicEventsService {
           ? 'Face matching is available after creating an event-scoped session and granting consent.'
           : available
             ? model.ready
-              ? 'Face matching is awaiting a validated event threshold and administrator approval.'
+              ? 'Face matching is not enabled for this event or has not been validated at the system level.'
               : 'Face matching is temporarily unavailable while the recognition model is offline.'
             : 'Photo finding is not currently available for this event.',
     };

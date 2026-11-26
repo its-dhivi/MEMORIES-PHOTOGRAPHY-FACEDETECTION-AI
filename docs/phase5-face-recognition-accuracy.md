@@ -1,8 +1,10 @@
 # Phase 5: face recognition accuracy and reliability
 
+> **Current workflow note (2026-11-27):** Historical event-level approval instructions below are superseded. Owners/admins can privately search without an event approval record. Public guest matching requires system-level model validation and the event's Enable Face Matching switch. Legacy approval columns remain for database compatibility and are not consulted.
+
 ## Production assessment
 
-The implementation has improved coverage and diagnosis, but **recognition accuracy is not yet validated for weddings or production guest delivery**. The supplied ControlFace10K benchmark is synthetic and single subject. Its held-out pair precision at the existing 0.64 similarity threshold was only 38 true positives against 136 false positives (21.84%). The guest finder now requires an explicit event-level approval backed by representative, consented evaluation evidence. The synthetic benchmark did not qualify for approval. Do not approve a production event until its own labeled evaluation meets the acceptance policy and group photographs have been checked.
+The implementation has improved coverage and diagnosis, but **recognition accuracy is not yet validated for weddings or production guest delivery**. The supplied ControlFace10K benchmark is synthetic and single subject. Its held-out pair precision at the existing 0.64 similarity threshold was only 38 true positives against 136 false positives (21.84%). Public matching remains disabled until system-level representative evaluation is complete. The synthetic benchmark does not qualify. Private owner/admin searches do not expose results to guests.
 
 ## Pipeline audit and root causes
 
@@ -24,13 +26,13 @@ Model contract references: [AuraFace V1](https://huggingface.co/fal/AuraFace-v1)
 ## Implemented controls and diagnostics
 
 - Admin, owner, and photographer roles can inspect a photo at `/dashboard/events/{eventId}/photos/{photoId}/diagnostics`. The page shows the authorized original/preview, detected boxes, confidence, landmarks, aligned crops, dimensions, quality, embedding status, indexed versions, and failure reason. A test selfie returns the expected photo's score and threshold decision. Calls are audited without storing the selfie or embedding.
-- The earlier pair-count approval rule described in this Phase 5 report is superseded for production by a signed gallery-evaluation artifact. Production now requires a trusted HMAC signature bound to the event, threshold, and model versions plus at least three held-out events, 1,000 queries, a 99% lower Wilson bound on photo precision, 50% photo recall, and a 0.1% upper Wilson bound on per-query false acceptance. Nonproduction smoke-test behavior remains limited to nonproduction. These gates are operational safeguards, not claims of accuracy or legal compliance.
+- Current release control: authenticated owners/admins may privately search their event. Public search remains disabled until separately validated at system level and also enabled for the event. The historical event approval fields are not read.
 - Guest selfie guidance now covers light, centering, camera distance, blur, and multiple faces. Server quality errors are surfaced as actionable messages.
 - Search results use pagination and remain tied to the owning guest session and consent. Original and ZIP download authorization remains in place.
 
 ## Database and configuration
 
-Migration `20261126000400_phase5_pipeline_versions` adds photo detection version; face embedding preprocessing version and composite unique key; search preprocessing version; and event matching approval/evidence/previous threshold fields. Existing AuraFace embeddings receive the unchanged `auraface-rgb-112-v1` preprocessing tag. Apply with the Compose migration gate or `corepack pnpm --filter @memories/api prisma:migrate` before starting the updated API.
+Migration `20261126000400_phase5_pipeline_versions` added photo detection version; face embedding preprocessing version and composite unique key; search preprocessing version; and legacy approval metadata. Migration `20261127000100_event_face_matching_toggle` adds the guest-facing `faceMatchingEnabled` column, default false for all existing events. It does not delete or rewrite existing event, photo, or legacy approval records. Existing AuraFace embeddings receive the unchanged `auraface-rgb-112-v1` preprocessing tag. Apply migrations before starting the updated API.
 
 New settings in `.env.example` and `services/face-ai/.env.example`: `FACE_PREPROCESSING_VERSION=auraface-rgb-112-v1`, `FACE_DETECTION_PIPELINE_VERSION=phase5-v2`, `FACE_DETECTION_GLOBAL_MAX_SIDE=1600`, `FACE_DETECTION_TILE_SIZE=1280`, `FACE_DETECTION_MAX_TILES=16`; `FACE_MATCH_MAX_RESULTS` defaults to 1000. Do not change a preprocessing version without regenerating embeddings and new calibration.
 
@@ -69,7 +71,7 @@ The identity evaluator also accepts a local CSV manifest of consented, labeled s
 
 1. Back up PostgreSQL and private object storage. Apply the migration and deploy the new workers with the existing migration gate.
 2. Dry-run `node apps/api/scripts/reindex-face-embeddings.cjs` in the API runtime with `DATABASE_URL`, `REDIS_URL`, and `FACE_MODEL_VERSION`. It prints the count. Add `--apply` to queue changed/missing detection versions. It reuses stored originals to build the 4096-pixel AI derivative, leaves originals untouched, retains the old embedding version until a replacement transaction succeeds, and can be rerun after interruption. Monitor failed processing jobs before approval.
-3. Evaluate and approve only a version-compatible threshold from representative, consented data. The event approval stores previous threshold and evidence.
+3. Evaluate threshold candidates only on representative, consented, gallery-level evaluation data. Public guest release is controlled at system level; no per-event artifact upload is used.
 4. To roll back matching immediately, use **Revoke approval** in event settings. That restores the prior threshold and expires guest searches/download jobs. For a code rollback, redeploy the previous images after restoring the compatible schema/database backup; do not drop columns while the new API is running. Retained older embeddings allow a previous compatible model to be reselected, subject to new approval.
 
 ## Remaining limitations

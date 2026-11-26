@@ -62,11 +62,9 @@ export interface EventSettings {
   accessPinConfigured: boolean;
   downloadsEnabled: boolean;
   downloadAllEnabled: boolean;
+  faceMatchingEnabled: boolean;
   retentionDays: number;
   similarityThreshold?: number | string;
-  matchingApprovedAt?: string | null;
-  matchingModelVersion?: string | null;
-  matchingPreprocessingVersion?: string | null;
 }
 
 export interface Paginated<T> {

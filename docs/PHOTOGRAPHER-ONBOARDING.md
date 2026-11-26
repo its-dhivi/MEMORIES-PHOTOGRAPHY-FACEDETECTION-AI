@@ -1,6 +1,6 @@
 # Photographer onboarding
 
-This guide covers the current Memories workflow. Before onboarding customers, configure a production host, privacy notice, retention policy, support contact, and event matching approval. Public face matching remains disabled unless the event has an approved signed evaluation artifact.
+This guide covers the current Memories workflow. Before onboarding customers, configure a production host, privacy notice, retention policy, and support contact. Owners and administrators can privately search an event immediately. Public guest face matching requires system-level model validation plus the event's Enable Face Matching toggle; no event-level evaluation upload or approval procedure is required.
 
 ## Before the event
 
@@ -19,7 +19,7 @@ This guide covers the current Memories workflow. Before onboarding customers, co
 
 ## Share with guests
 
-Download the event QR code after the slug and public URL are final. Check the QR code on a phone, confirm the PIN/privacy text, and explain that face matching can miss photos or return incorrect results. Do not claim matching is active until the dashboard confirms a current signed approval for the event.
+Download the event QR code after the slug and public URL are final. Check the QR code on a phone, confirm the PIN/privacy text, and explain that face matching can miss photos or return incorrect results. Guest matching becomes available only when system validation is enabled and the event-level toggle is on.
 
 ## After the event
 

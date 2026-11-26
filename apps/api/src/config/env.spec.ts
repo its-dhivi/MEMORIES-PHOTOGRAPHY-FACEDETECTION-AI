@@ -26,18 +26,16 @@ describe('environment validation', () => {
     expect(() => validateEnvironment({ ...valid, JWT_ACCESS_SECRET: 'short' })).toThrow(
       'Environment validation failed',
     ));
-  it('requires the trusted evaluation signer secret in production', () => {
-    expect(() => validateEnvironment({ ...valid, NODE_ENV: 'production' })).toThrow(
-      'Environment validation failed',
+  it('keeps public matching disabled by default and requires system validation to enable it', () => {
+    expect(validateEnvironment(valid).PUBLIC_FACE_MATCHING_ENABLED).toBe(false);
+    expect(() => validateEnvironment({ ...valid, PUBLIC_FACE_MATCHING_ENABLED: true })).toThrow(
+      'public matching requires system model validation',
     );
     expect(() =>
       validateEnvironment({
         ...valid,
-        NODE_ENV: 'production',
-        WEB_ORIGIN: 'https://photos.example.in',
-        S3_PUBLIC_ENDPOINT: 'https://s3.photos.example.in',
-        PUBLIC_APP_URL: 'https://photos.example.in',
-        EVALUATION_SIGNING_SECRET: 'f'.repeat(32),
+        PUBLIC_FACE_MATCHING_ENABLED: true,
+        PUBLIC_FACE_MATCHING_MODEL_VALIDATED: true,
       }),
     ).not.toThrow();
   });

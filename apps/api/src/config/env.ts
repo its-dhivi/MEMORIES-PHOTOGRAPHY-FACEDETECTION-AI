@@ -30,11 +30,10 @@ export const validateEnvironment = (values: Record<string, unknown>) => {
     UPLOAD_SESSION_TTL_SECONDS: Joi.number().integer().min(300).max(86400).default(3600),
     AI_SERVICE_URL: Joi.string().uri().required(),
     AI_INTERNAL_TOKEN: Joi.string().min(32).required(),
-    EVALUATION_SIGNING_SECRET: Joi.string().when('NODE_ENV', {
-      is: 'production',
-      then: Joi.string().min(32).required(),
-      otherwise: Joi.string().optional(),
-    }),
+    PUBLIC_FACE_MATCHING_ENABLED: Joi.boolean().default(false),
+    PUBLIC_FACE_MATCHING_MODEL_VALIDATED: Joi.boolean().default(false),
+    FACE_MODEL_VERSION: Joi.string().optional(),
+    FACE_PREPROCESSING_VERSION: Joi.string().optional(),
     FACE_INFERENCE_TIMEOUT_SECONDS: Joi.number().integer().min(5).max(300).default(60),
     FACE_PROCESSING_MAX_RETRIES: Joi.number().integer().min(1).max(10).default(5),
     FACE_MAX_CONCURRENT_INFERENCES: Joi.number().integer().min(1).max(32).default(2),
@@ -55,5 +54,11 @@ export const validateEnvironment = (values: Record<string, unknown>) => {
     value: unknown;
   };
   if (result.error) throw new Error(`Environment validation failed: ${result.error.message}`);
-  return result.value as Record<string, unknown>;
+  const normalized = result.value as Record<string, unknown>;
+  if (normalized.PUBLIC_FACE_MATCHING_ENABLED && !normalized.PUBLIC_FACE_MATCHING_MODEL_VALIDATED) {
+    throw new Error(
+      'Environment validation failed: public matching requires system model validation',
+    );
+  }
+  return normalized;
 };

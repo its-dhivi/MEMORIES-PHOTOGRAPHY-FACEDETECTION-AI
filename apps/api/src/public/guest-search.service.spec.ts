@@ -21,9 +21,7 @@ const activeSession = {
       accessExpiresAt: null,
       consentVersion: '1.0',
       similarityThreshold: 0.7,
-      matchingApprovedAt: new Date(),
-      matchingModelVersion: 'licensed-v1',
-      matchingPreprocessingVersion: 'auraface-rgb-112-v1',
+      faceMatchingEnabled: true,
       searchResultTtlMinutes: 60,
     },
   },
@@ -31,7 +29,12 @@ const activeSession = {
 };
 
 function createService(prisma: object): GuestSearchService {
-  const config = { getOrThrow: jest.fn().mockReturnValue('s'.repeat(32)) };
+  const config = {
+    getOrThrow: jest.fn().mockReturnValue('s'.repeat(32)),
+    get: jest.fn((key: string, fallback: unknown) =>
+      key === 'FACE_MATCH_MAX_RESULTS' ? 100 : fallback,
+    ),
+  };
   return new GuestSearchService(
     prisma as PrismaService,
     {} as AiService,
@@ -82,6 +85,13 @@ describe('GuestSearchService authorization', () => {
       ),
     };
     const ai = {
+      readiness: jest
+        .fn()
+        .mockResolvedValue({
+          ready: true,
+          modelVersion: 'licensed-v1',
+          preprocessingVersion: 'auraface-rgb-112-v1',
+        }),
       embedSelfie: jest.fn().mockResolvedValue({
         modelVersion: 'licensed-v1',
         preprocessingVersion: 'auraface-rgb-112-v1',
@@ -90,7 +100,16 @@ describe('GuestSearchService authorization', () => {
     };
     const config = {
       getOrThrow: jest.fn().mockReturnValue('s'.repeat(32)),
-      get: jest.fn().mockReturnValue(100),
+      get: jest.fn(
+        (key: string, fallback: unknown) =>
+          ({
+            FACE_MATCH_MAX_RESULTS: 100,
+            PUBLIC_FACE_MATCHING_ENABLED: true,
+            PUBLIC_FACE_MATCHING_MODEL_VALIDATED: true,
+            FACE_MODEL_VERSION: 'licensed-v1',
+            FACE_PREPROCESSING_VERSION: 'auraface-rgb-112-v1',
+          })[key] ?? fallback,
+      ),
     };
     const service = new GuestSearchService(
       prisma as unknown as PrismaService,
@@ -111,6 +130,45 @@ describe('GuestSearchService authorization', () => {
     expect(query.values).toContain('licensed-v1');
     expect(query.values).toContain('auraface-rgb-112-v1');
     expect(query.values).toContain(0.7);
+  });
+
+  it('rejects public searches unless the event and system gates are both enabled', async () => {
+    const consented = {
+      ...activeSession,
+      event: {
+        ...activeSession.event,
+        settings: { ...activeSession.event.settings, faceMatchingEnabled: false },
+      },
+      consents: [{ type: 'BIOMETRIC_PROCESSING', withdrawnAt: null, version: '1.0' }],
+    };
+    const prisma = {
+      guestSession: {
+        findUnique: jest.fn().mockResolvedValue(consented),
+        update: jest.fn().mockResolvedValue(consented),
+      },
+      photoSearch: { create: jest.fn() },
+    };
+    const ai = { readiness: jest.fn(), embedSelfie: jest.fn() };
+    const config = {
+      getOrThrow: jest.fn().mockReturnValue('s'.repeat(32)),
+      get: jest.fn((key: string, fallback: unknown) => fallback),
+    };
+    const service = new GuestSearchService(
+      prisma as unknown as PrismaService,
+      ai as unknown as AiService,
+      {} as StorageService,
+      config as unknown as ConfigService,
+      { add: jest.fn() } as unknown as Queue,
+    );
+    await expect(
+      service.search('event-a', 'opaque-token', {
+        buffer: Buffer.from('selfie'),
+        mimetype: 'image/jpeg',
+        originalname: 'selfie.jpg',
+      }),
+    ).rejects.toThrow('Public face matching is unavailable');
+    expect(ai.embedSelfie).not.toHaveBeenCalled();
+    expect(prisma.photoSearch.create).not.toHaveBeenCalled();
   });
 
   it('does not return a search owned by another guest session', async () => {

@@ -50,7 +50,8 @@ services:
   api:
     env_file: !override [.env.production]
     environment:
-      EVALUATION_SIGNING_SECRET: ${EVALUATION_SIGNING_SECRET:?inject EVALUATION_SIGNING_SECRET from a secret manager}
+      PUBLIC_FACE_MATCHING_ENABLED: ${PUBLIC_FACE_MATCHING_ENABLED:-false}
+      PUBLIC_FACE_MATCHING_MODEL_VALIDATED: ${PUBLIC_FACE_MATCHING_MODEL_VALIDATED:-false}
     ports: !reset []
     restart: unless-stopped
     mem_limit: 2g

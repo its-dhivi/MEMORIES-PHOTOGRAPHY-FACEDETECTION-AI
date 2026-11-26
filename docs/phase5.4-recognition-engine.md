@@ -4,7 +4,7 @@
 
 The FastAPI recognition manager now selects between the existing generic ONNX provider and OpenCV Zoo SFace through `FACE_MODEL_PROVIDER`. AuraFace retains ONNX Runtime preprocessing. SFace uses OpenCV `FaceRecognizerSF.alignCrop` and `feature`, enforces CPU execution, checks its expected 128-dimensional output, and L2-normalizes before writing the existing `vector(512)` shape via zero padding. Model name/version and preprocessing version are emitted with each response. A lock serializes OpenCV SFace recognition calls.
 
-The API's query filters continue to require event ID, approved model version, and preprocessing version. The event approval record binds the active model and preprocessing version. This isolates AuraFace and SFace vectors and causes old approval evidence to fail closed after a version change. Candidate mode consists of running an isolated AI deployment with candidate version values while leaving public matching approval unset; it is not a guest-visible shadow result mode and no unapproved candidate matches are returned publicly.
+The API's query filters require event ID plus matching model and preprocessing versions. AuraFace and SFace vectors remain isolated. Private owner/admin searches are available without event-level approval. Public guest matching remains fail-closed unless the event toggle and system-level model-validation flags are enabled and active model versions match. Candidate mode is not guest-visible.
 
 ## Candidate configuration
 
@@ -27,10 +27,10 @@ Verify the artifact with `python services/face-ai/scripts/verify_model_checksum.
 ## Migration and rollback
 
 1. Preserve originals and existing AuraFace embeddings. Back up database and object data.
-2. Start a separate candidate provider/version and create candidate embeddings under its distinct model and preprocessing labels. Do not change event approval records.
+2. Start a separate candidate provider/version and create candidate embeddings under its distinct model and preprocessing labels.
 3. Confirm candidate indexing is complete and compare gallery metrics against the frozen evaluation split.
 4. If rejected, restore prior API/AI environment and image tag. Version-filtered candidate vectors remain ineligible for the old approval; clean them only through a reviewed, event-scoped retention operation after backup. Reindex photos that were overwritten in the `Photo.modelVersion` summary field if needed; embedding rows themselves preserve the versioned index.
-5. If a migration is later approved, switch both API and AI configuration together, run resumable reindexing with progress/failure checks, confirm every photo is ready for that version, then obtain a newly signed approval artifact for each eligible event. Revoke old approvals first; never reuse a threshold across model/preprocessing versions.
+5. If a migration is approved, switch API and AI configuration together, run resumable reindexing with progress/failure checks, confirm event coverage for that version, and complete system-level validation before enabling public matching. Never compare or reuse thresholds across model/preprocessing versions without recalibration.
 
 ## Incomplete capability
 

@@ -10,7 +10,6 @@ const required = [
   'COOKIE_SECRET',
   'PASSWORD_RESET_PEPPER',
   'AI_INTERNAL_TOKEN',
-  'EVALUATION_SIGNING_SECRET',
   'WEB_ORIGIN',
 ];
 const production = process.argv.includes('--production');
@@ -25,9 +24,6 @@ const env = Object.fromEntries(
       return [line.slice(0, index), line.slice(index + 1)];
     }),
 );
-if (process.env.EVALUATION_SIGNING_SECRET) {
-  env.EVALUATION_SIGNING_SECRET = process.env.EVALUATION_SIGNING_SECRET;
-}
 const missing = required.filter((name) => !env[name]);
 const placeholders = required.filter((name) => /replace-with|change-me/i.test(env[name] ?? ''));
 const errors = [];
@@ -52,13 +48,15 @@ if (production) {
     'COOKIE_SECRET',
     'PASSWORD_RESET_PEPPER',
     'AI_INTERNAL_TOKEN',
-    'EVALUATION_SIGNING_SECRET',
   ];
   for (const name of secrets) {
     if ((env[name] ?? '').length < 32) errors.push(`${name} must have at least 32 characters`);
   }
   if (new Set(secrets.map((name) => env[name])).size !== secrets.length) {
     errors.push('Application secrets must have distinct values');
+  }
+  if (env.PUBLIC_FACE_MATCHING_ENABLED === 'true' && env.PUBLIC_FACE_MATCHING_MODEL_VALIDATED !== 'true') {
+    errors.push('Public face matching requires system-level model validation');
   }
 }
 if (missing.length || placeholders.length || errors.length) {

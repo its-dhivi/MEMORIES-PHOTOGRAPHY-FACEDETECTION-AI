@@ -9,7 +9,7 @@ The proxy expects `TLS_CERT_DIR/fullchain.pem` and `TLS_CERT_DIR/privkey.pem`. T
 ## Linux deployment
 
 1. Provision a supported Linux host, Docker Engine and Compose v2.24 or newer (for Compose `!reset`/`!override` tags), DNS for the app and S3 subdomains, firewall rules allowing only 80/443 inbound, TLS certificate, and protected secret backup. Prefer PostgreSQL/Redis on SSD; use HDD-backed storage for original images/objects. Set restrictive filesystem permissions and provision independent backup capacity.
-2. Copy the template to `.env.production`; replace every placeholder. Inject `EVALUATION_SIGNING_SECRET` into the Compose process environment through the host's secret manager; it is deliberately absent from service env files and passed only to the API. Create the configured PostgreSQL, object, and TLS directories. Point `POSTGRES_DATA_DIR`, `OBJECTS_DATA_DIR`, and `TLS_CERT_DIR` to absolute paths on intended disks. Keep env/TLS files out of Git. Update `infrastructure/docker/minio-cors-production.json` to the exact app origin before startup.
+2. Copy the template to `.env.production`; replace every placeholder. Keep `PUBLIC_FACE_MATCHING_ENABLED=false` and `PUBLIC_FACE_MATCHING_MODEL_VALIDATED=false` until the recognition model has passed system-level evaluation on consented, representative event data. Private searches by event owners and administrators are available independently. Create the configured PostgreSQL, object, and TLS directories. Point `POSTGRES_DATA_DIR`, `OBJECTS_DATA_DIR`, and `TLS_CERT_DIR` to absolute paths on intended disks. Keep env/TLS files out of Git. Update `infrastructure/docker/minio-cors-production.json` to the exact app origin before startup.
 3. Run preflight and review resolved configuration without publishing it:
 
 ```sh
@@ -27,7 +27,7 @@ docker compose --env-file .env.production -f docker-compose.yml -f docker-compos
 docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml ps
 ```
 
-Verify both hostnames, TLS, health checks, private service port exposure from outside, signed upload/download, restart persistence, and an isolated end-to-end event before accepting customers. Keep matching approval off until its separate release gates are met.
+Verify both hostnames, TLS, health checks, private service port exposure from outside, signed upload/download, restart persistence, and an isolated end-to-end event before accepting customers. Public guest face matching remains off until system validation and the system feature flag are explicitly enabled.
 
 ## Windows / WSL2
 
