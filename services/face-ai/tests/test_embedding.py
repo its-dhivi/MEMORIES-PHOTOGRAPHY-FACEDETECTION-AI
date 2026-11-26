@@ -16,6 +16,15 @@ class FakeSFaceRecognizer:
         return [vector]
 
 
+class CapturingRecognizer(FakeSFaceRecognizer):
+    def run(self, outputs, inputs):
+        tensor = inputs["input"]
+        assert tensor.shape == (1, 3, 112, 112)
+        assert tensor.dtype == np.float32
+        assert np.all(tensor == 127.0)
+        return super().run(outputs, inputs)
+
+
 def test_embedding_is_finite_normalized_and_deterministic() -> None:
     settings = Settings(
         ai_internal_token="a" * 32,
@@ -45,7 +54,7 @@ def test_sface_embedding_is_zero_padded_without_changing_cosine_geometry() -> No
         face_embedding_dimension=512,
     )
     manager = ModelManager(settings)
-    manager.recognizer = FakeSFaceRecognizer()
+    manager.recognizer = CapturingRecognizer()
     manager.input_name = "input"
     aligned = np.full((112, 112, 3), 127, dtype=np.uint8)
 

@@ -12,6 +12,13 @@ Container health uses `/health/live`; application readiness uses `/health/ready`
 
 Required variables are in `.env.example`: model paths/version/dimension, device, detection/quality limits, concurrency, timeout, retries, and result limits.
 
+When recognition preprocessing or model weights change, assign a new `FACE_MODEL_VERSION` and
+reindex existing photos before allowing guest searches. With Compose, preview the migration using
+`docker compose exec api node apps/api/scripts/reindex-face-embeddings.cjs`, then queue it with
+`docker compose exec api node apps/api/scripts/reindex-face-embeddings.cjs --apply`. Confirm every
+active photo is `READY` with the new model version. Searches made with the old version should be
+expired so guests cannot use stale results.
+
 Release checklist:
 
 - Apply the Phase 3 migration and confirm pgvector indexes.

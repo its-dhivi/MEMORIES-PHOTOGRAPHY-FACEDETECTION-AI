@@ -161,7 +161,9 @@ class ModelManager:
         if recognizer is None:
             raise RuntimeError("Recognition model is unavailable")
         rgb = aligned[:, :, ::-1].astype(np.float32)
-        tensor = ((rgb - 127.5) / 127.5).transpose(2, 0, 1)[None, ...]
+        # OpenCV FaceRecognizerSF.feature uses blobFromImage with scale=1 and
+        # mean=0. SFace expects RGB values in the original 0..255 range.
+        tensor = rgb.transpose(2, 0, 1)[None, ...]
         vector = recognizer.run(None, {self.input_name: tensor})[0][0].astype(np.float32)
         if vector.shape[0] != self.settings.face_recognition_output_dimension or not np.isfinite(
             vector

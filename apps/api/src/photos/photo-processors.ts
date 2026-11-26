@@ -108,7 +108,7 @@ export class ThumbnailProcessor extends WorkerHost {
           'process-photo',
           { photoId: photo.id, eventId: photo.eventId, processingJobId: aiJob.id },
           {
-            jobId: aiJob.id,
+            jobId: `${aiJob.id}-${Date.now()}`,
             attempts: aiJob.maxAttempts,
             backoff: { type: 'exponential', delay: 2000 },
           },
