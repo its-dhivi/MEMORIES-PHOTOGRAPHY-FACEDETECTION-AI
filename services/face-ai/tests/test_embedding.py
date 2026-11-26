@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from time import sleep
+
 import numpy as np
 
 from app.config import Settings
@@ -63,3 +66,31 @@ def test_sface_embedding_is_zero_padded_without_changing_cosine_geometry() -> No
     assert embedding.shape == (512,)
     assert np.count_nonzero(embedding[128:]) == 0
     assert abs(float(np.linalg.norm(embedding)) - 1.0) < 1e-6
+
+
+def test_concurrent_detection_keeps_each_image_size() -> None:
+    class Detector:
+        size = (0, 0)
+
+        def setInputSize(self, size):
+            self.size = size
+
+        def detect(self, image):
+            sleep(0.05)
+            assert self.size == (image.shape[1], image.shape[0])
+            return 0, None
+
+    settings = Settings(
+        ai_internal_token="a" * 32,
+        face_model_version="test-v1",
+        face_recognition_model_path="/missing/recognition.onnx",
+        face_detection_model_path="/missing/detection.onnx",
+    )
+    manager = ModelManager(settings)
+    manager.detector = Detector()
+    manager.recognizer = FakeRecognizer()
+    manager.error = None
+    images = [np.zeros((640, 480, 3), dtype=np.uint8), np.zeros((1200, 900, 3), dtype=np.uint8)]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(manager.analyze, images))
+    assert [result.faces for result in results] == [[], []]

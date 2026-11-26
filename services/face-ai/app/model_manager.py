@@ -1,4 +1,5 @@
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from .config import Settings
@@ -10,6 +11,7 @@ class ModelManager:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self._detector_lock = Lock()
         self.detector: Any | None = None
         self.recognizer: Any | None = None
         self.input_name = ""
@@ -82,8 +84,11 @@ class ModelManager:
             raise RuntimeError("Detection model is unavailable")
         height, width = rgb.shape[:2]
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        detector.setInputSize((width, height))
-        _, detections = detector.detect(bgr)
+        # FaceDetectorYN stores input size on the shared instance. Concurrent
+        # requests must not change it between setInputSize and detect.
+        with self._detector_lock:
+            detector.setInputSize((width, height))
+            _, detections = detector.detect(bgr)
         faces: list[FaceAnalysis] = []
         if detections is not None:
             for row in sorted(detections, key=lambda item: (float(item[1]), float(item[0]))):
