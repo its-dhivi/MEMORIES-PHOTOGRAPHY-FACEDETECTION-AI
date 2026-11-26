@@ -24,7 +24,7 @@ class CapturingRecognizer(FakeSFaceRecognizer):
         tensor = inputs["input"]
         assert tensor.shape == (1, 3, 112, 112)
         assert tensor.dtype == np.float32
-        assert np.all(tensor == 127.0)
+        assert np.allclose(tensor, (127.0 - 127.5) / 127.5)
         return super().run(outputs, inputs)
 
 
@@ -47,7 +47,7 @@ def test_embedding_is_finite_normalized_and_deterministic() -> None:
     assert np.allclose(first, second)
 
 
-def test_sface_embedding_is_zero_padded_without_changing_cosine_geometry() -> None:
+def test_smaller_embedding_is_zero_padded_without_changing_cosine_geometry() -> None:
     settings = Settings(
         ai_internal_token="a" * 32,
         face_model_version="opencv-sface-2021dec-v1",
@@ -66,6 +66,25 @@ def test_sface_embedding_is_zero_padded_without_changing_cosine_geometry() -> No
     assert embedding.shape == (512,)
     assert np.count_nonzero(embedding[128:]) == 0
     assert abs(float(np.linalg.norm(embedding)) - 1.0) < 1e-6
+
+
+def test_raw_rgb_mode_remains_available_for_previous_model_versions() -> None:
+    class RawRecognizer(FakeRecognizer):
+        def run(self, outputs, inputs):
+            assert np.all(inputs["input"] == 127.0)
+            return super().run(outputs, inputs)
+
+    settings = Settings(
+        ai_internal_token="a" * 32,
+        face_model_version="previous-v1",
+        face_recognition_model_path="/missing/recognition.onnx",
+        face_detection_model_path="/missing/detection.onnx",
+        face_recognition_input_normalization="none",
+    )
+    manager = ModelManager(settings)
+    manager.recognizer = RawRecognizer()
+    manager.input_name = "input"
+    manager._embedding(np.full((112, 112, 3), 127, dtype=np.uint8), np)
 
 
 def test_concurrent_detection_keeps_each_image_size() -> None:

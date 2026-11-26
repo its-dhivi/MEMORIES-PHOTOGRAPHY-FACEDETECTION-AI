@@ -168,7 +168,7 @@ model EventSettings {
   retentionDays         Int @default(90)
   selfieRetentionMinutes Int @default(0)
   searchResultTtlMinutes Int @default(60)
-  similarityThreshold   Decimal @default(0.62) @db.Decimal(4, 3)
+  similarityThreshold   Decimal @default(0.64) @db.Decimal(4, 3)
   consentVersion        String @default("1.0") @db.VarChar(32)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

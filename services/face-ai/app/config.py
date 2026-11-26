@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     face_model_name: str = "operator-supplied"
     face_model_version: str = Field(min_length=1)
     face_recognition_model_path: str
+    face_recognition_input_normalization: Literal["none", "minus_one_one"] = "minus_one_one"
     face_detection_model_path: str
     face_embedding_dimension: int = Field(default=512, ge=1, le=4096)
     face_recognition_output_dimension: int = Field(default=512, ge=1, le=4096)

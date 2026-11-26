@@ -41,7 +41,7 @@ Requirements: Node.js 22, pnpm 10, Docker Compose v2, and Python 3.11/3.12.
 
 1. Copy `.env.example` to `.env` and replace secrets.
 2. Run `powershell -ExecutionPolicy Bypass -File scripts/provision-face-models.ps1` to provision and
-   checksum-verify the local YuNet and ArcFace models. Review their licenses before production use.
+   checksum-verify the local YuNet and AuraFace models. Review their licenses before production use.
 3. Run `pnpm install`, `pnpm db:generate`, and `pnpm db:migrate`.
 4. Run `docker compose up --build`.
 5. Confirm `/health/live` and then `/health/ready`; readiness must report the configured model.
@@ -64,8 +64,9 @@ Benchmarks:
 
 - Weights are downloaded into a local Docker volume, never committed to the repository or included
   in application images.
+- AuraFace recognition weights are fetched from [the Hugging Face ONNX export](https://huggingface.co/imagent/auraface-onnx), derived from [fal/AuraFace-v1](https://huggingface.co/fal/AuraFace-v1) under Apache-2.0. The separate YuNet detector comes from OpenCV Zoo. No hosted inference API is used; server compute and storage still cost money.
 - A real same-image match is a pipeline smoke test, not an accuracy or production-readiness claim.
-- Similarity is a model score, not identity probability. The existing 0.62 database default is only a migration default and must not be treated as calibrated.
+- Similarity is a model score, not identity probability. The conservative 0.64 AuraFace default was selected from a small event sample; calibrate it with representative consented selfies before production use. It can miss true matches.
 - Guest routes are `/e/:slug`, `/access`, `/selfie`, `/searching`, `/results`, and `/privacy`. The Next.js BFF keeps the opaque guest token in a Secure/HttpOnly/SameSite cookie; only non-secret search IDs use per-tab session storage.
 - Individual and ZIP downloads are checked against the active session, current consent, owned unexpired search, event settings, and non-deleted photos. ZIP objects expire and cleanup runs every 15 minutes.
 - Production recognition remains subject to model-license review, privacy review, and threshold
