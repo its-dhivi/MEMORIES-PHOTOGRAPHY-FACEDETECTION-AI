@@ -4,6 +4,8 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
+  IsObject,
   IsIn,
   IsOptional,
   IsString,
@@ -61,4 +63,13 @@ export class UpdateEventSettingsDto {
   @IsOptional() @IsBoolean() downloadsEnabled?: boolean;
   @IsOptional() @IsBoolean() downloadAllEnabled?: boolean;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) retentionDays?: number;
+}
+
+export class ApproveMatchingDto {
+  @IsNumber() @Min(0) @Max(1) threshold!: number;
+  @IsString() @Length(1, 80) modelVersion!: string;
+  @IsString() @Length(1, 80) preprocessingVersion!: string;
+  @IsString() @Length(1, 120) source!: string;
+  @IsObject() evaluationResults!: Record<string, unknown>;
+  @IsOptional() @IsString() @Length(64, 64) evidenceSignature?: string;
 }

@@ -21,6 +21,9 @@ const activeSession = {
       accessExpiresAt: null,
       consentVersion: '1.0',
       similarityThreshold: 0.7,
+      matchingApprovedAt: new Date(),
+      matchingModelVersion: 'licensed-v1',
+      matchingPreprocessingVersion: 'auraface-rgb-112-v1',
       searchResultTtlMinutes: 60,
     },
   },
@@ -81,6 +84,7 @@ describe('GuestSearchService authorization', () => {
     const ai = {
       embedSelfie: jest.fn().mockResolvedValue({
         modelVersion: 'licensed-v1',
+        preprocessingVersion: 'auraface-rgb-112-v1',
         faces: [{ embedding: Array.from({ length: 512 }, () => 0.01) }],
       }),
     };
@@ -105,6 +109,7 @@ describe('GuestSearchService authorization', () => {
     const query = capturedQueries[0] as { values: unknown[] };
     expect(query.values).toContain('event-a');
     expect(query.values).toContain('licensed-v1');
+    expect(query.values).toContain('auraface-rgb-112-v1');
     expect(query.values).toContain(0.7);
   });
 
@@ -154,9 +159,17 @@ describe('GuestSearchService authorization', () => {
       service.download('photo-from-another-search', 'owned-search', 'opaque-token'),
     ).rejects.toBeInstanceOf(NotFoundException);
     const call = (prisma.searchResult.findFirst.mock.calls as unknown[][])[0]?.[0] as {
-      where: { photoId: string };
+      where: {
+        photoId: string;
+        search: { eventId: string; guestSessionId: string };
+        photo: { eventId: string };
+      };
     };
-    expect(call.where.photoId).toBe('photo-from-another-search');
+    expect(call.where).toMatchObject({
+      photoId: 'photo-from-another-search',
+      search: { eventId: 'event-a', guestSessionId: 'session-a' },
+      photo: { eventId: 'event-a' },
+    });
   });
 
   it('denies downloads when the event setting is disabled', async () => {

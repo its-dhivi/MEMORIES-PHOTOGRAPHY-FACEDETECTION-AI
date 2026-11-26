@@ -13,6 +13,7 @@ import {
   DownloadJobStatus,
   EventStatus,
   GuestSessionStatus,
+  PhotoStatus,
   Prisma,
   SearchStatus,
 } from '@prisma/client';
@@ -154,6 +155,8 @@ export class GuestSearchService {
     const session = await this.requireSession(token, slug, true);
     if (!file?.buffer?.length) throw new BadRequestException('A selfie is required');
     const settings = session.event.settings!;
+    if (!settings.matchingApprovedAt)
+      throw new ForbiddenException('Face matching is awaiting event approval');
     const threshold = Number(settings.similarityThreshold);
     const search = await this.prisma.photoSearch.create({
       data: {
@@ -166,25 +169,32 @@ export class GuestSearchService {
     });
     try {
       const analysis = await this.ai.embedSelfie(file.buffer, file.mimetype, file.originalname);
+      if (
+        settings.matchingModelVersion !== analysis.modelVersion ||
+        settings.matchingPreprocessingVersion !== analysis.preprocessingVersion
+      ) {
+        throw new ForbiddenException('Approved face matching pipeline is no longer active');
+      }
       const embedding = analysis.faces[0]?.embedding;
       if (!embedding) throw new BadRequestException('Selfie did not contain a usable face');
       const vector = `[${embedding.join(',')}]`;
-      const limit = this.config.get<number>('FACE_MATCH_MAX_RESULTS', 100);
+      const limit = this.config.get<number>('FACE_MATCH_MAX_RESULTS', 1000);
       const matches = await this.prisma.$queryRaw<MatchRow[]>(Prisma.sql`
         SELECT ranked."photoId", ranked.similarity::double precision AS similarity
         FROM (
-          SELECT DISTINCT ON (fe."photoId") fe."photoId",
-            (1 - (fe.embedding <=> ${vector}::vector)) AS similarity
+          SELECT fe."photoId", MAX(1 - (fe.embedding <=> ${vector}::vector)) AS similarity
           FROM "FaceEmbedding" fe
           JOIN "Photo" p ON p.id = fe."photoId"
           WHERE fe."eventId" = ${session.eventId}::uuid
             AND fe."modelVersion" = ${analysis.modelVersion}
+            AND fe."preprocessingVersion" = ${analysis.preprocessingVersion}
             AND fe."qualityStatus" = 'ACCEPTED'
+            AND p."eventId" = ${session.eventId}::uuid
             AND p."deletedAt" IS NULL AND p.status = 'READY'
-            AND (1 - (fe.embedding <=> ${vector}::vector)) >= ${threshold}
-          ORDER BY fe."photoId", similarity DESC
+          GROUP BY fe."photoId"
         ) ranked
-        ORDER BY ranked.similarity DESC
+        WHERE ranked.similarity >= ${threshold}
+        ORDER BY ranked.similarity DESC, ranked."photoId" ASC
         LIMIT ${limit}
       `);
       await this.prisma.$transaction(async (tx) => {
@@ -204,6 +214,7 @@ export class GuestSearchService {
             status: SearchStatus.COMPLETED,
             faceCount: 1,
             modelVersion: analysis.modelVersion,
+            preprocessingVersion: analysis.preprocessingVersion,
             completedAt: new Date(),
           },
         });
@@ -251,8 +262,15 @@ export class GuestSearchService {
     return search;
   }
 
-  async results(searchId: string, token: string) {
+  async results(searchId: string, token: string, page = 1) {
+    if (!Number.isSafeInteger(page) || page < 1 || page > 100000)
+      throw new BadRequestException('Invalid results page');
     const session = await this.requireSession(token, undefined, true);
+    const pageSize = 100;
+    const resultWhere = {
+      searchId,
+      photo: { deletedAt: null, status: PhotoStatus.READY },
+    } as const;
     const search = await this.prisma.photoSearch.findFirst({
       where: {
         id: searchId,
@@ -265,6 +283,8 @@ export class GuestSearchService {
         results: {
           where: { photo: { deletedAt: null, status: 'READY' } },
           orderBy: { rank: 'asc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
           include: {
             photo: {
               select: { id: true, originalFilename: true, thumbnailKey: true, previewKey: true },
@@ -274,8 +294,13 @@ export class GuestSearchService {
       },
     });
     if (!search) throw new NotFoundException('Search results are unavailable');
+    const total = await this.prisma.searchResult.count({ where: resultWhere });
     return {
       searchId,
+      page,
+      pageSize,
+      total,
+      hasMore: page * pageSize < total,
       expiresAt: search.expiresAt,
       downloadsEnabled: session.event.settings!.downloadsEnabled,
       downloadAllEnabled: session.event.settings!.downloadAllEnabled,

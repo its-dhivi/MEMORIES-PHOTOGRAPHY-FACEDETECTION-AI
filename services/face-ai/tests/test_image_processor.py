@@ -37,3 +37,13 @@ def test_missing_models_never_report_ready() -> None:
     manager.load()
     assert manager.ready is False
     assert manager.error == "Configured model files are missing"
+
+
+def test_exif_orientation_is_applied_before_detection() -> None:
+    source = Image.new("RGB", (40, 20), "red")
+    metadata = Image.Exif()
+    metadata[274] = 6
+    buffer = BytesIO()
+    source.save(buffer, format="JPEG", exif=metadata)
+    decoded = decode_image(buffer.getvalue(), settings())
+    assert decoded.shape == (40, 20, 3)

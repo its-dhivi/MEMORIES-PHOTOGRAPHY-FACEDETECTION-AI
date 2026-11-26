@@ -3,10 +3,26 @@
 The AI container installs CPU ONNX Runtime and mounts `/models`; it contains no weights in the
 image. For local development, run `powershell -ExecutionPolicy Bypass -File
 scripts/provision-face-models.ps1` once before `docker compose up -d --build`. The script downloads
-the configured YuNet and ArcFace artifacts into the named Docker volume and verifies pinned checksums.
+the configured YuNet and AuraFace artifacts into the named Docker volume and verifies pinned checksums.
 In production, provision the reviewed artifacts through a controlled artifact system and mount them
 read-only. One service process loads models once; scale using separate containers and bounded
 inference concurrency.
+
+Before a production release, create a separate environment file with real secrets and public HTTPS
+URLs, then run `node scripts/verify-env.mjs --production path/to/production.env`. This check requires
+`NODE_ENV=production`, disables Swagger, checks public URL schemes, and checks that application
+secrets are distinct and at least 32 characters. It does not verify DNS, certificates, secret
+entropy, or external infrastructure. Do not use the repository's local `.env` for production.
+
+Compose runs `prisma migrate deploy` in a one-shot `migrate` service after PostgreSQL is healthy;
+the API waits for that service to succeed. Check `docker compose logs migrate` on each release.
+Back up the database before migrating, and rehearse restore before launch.
+
+The included Compose file is a local development stack: it publishes PostgreSQL, Redis, storage,
+API, and web ports on all host interfaces. For production, restrict private ports at the host or
+network layer, expose the web app only through a TLS reverse proxy, use durable encrypted storage
+and backups, and provide private API-to-AI networking. Set browser-visible URLs to the actual HTTPS
+hostnames. The current local `.env` uses HTTP and development mode and must not be deployed as-is.
 
 Container health uses `/health/live`; application readiness uses `/health/ready`. Missing or incompatible weights keep readiness false. GPU requires a separately reviewed CUDA-compatible image and `FACE_DEVICE=gpu`; verify the reported provider.
 

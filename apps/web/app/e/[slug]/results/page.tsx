@@ -1,5 +1,5 @@
 'use client';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Check, Download, Images, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useParams, useRouter } from 'next/navigation';
@@ -21,9 +21,11 @@ export default function ResultsPage() {
       setSearchId(sessionStorage.getItem(`memories-search:${slug}`) ?? undefined),
     );
   }, [slug]);
-  const results = useQuery({
+  const results = useInfiniteQuery({
     queryKey: ['guest-results', searchId],
-    queryFn: () => guestApi.results(searchId!),
+    queryFn: ({ pageParam }) => guestApi.results(searchId!, pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
     enabled: Boolean(searchId),
     retry: false,
   });
@@ -101,8 +103,9 @@ export default function ResultsPage() {
         </section>
       </GuestShell>
     );
-  const data = results.data;
-  if (!data.items.length)
+  const data = results.data.pages[0]!;
+  const items = results.data.pages.flatMap((loaded) => loaded.items);
+  if (!items.length)
     return (
       <GuestShell slug={slug}>
         <section className="mx-auto max-w-lg px-5 py-20 text-center">
@@ -141,7 +144,7 @@ export default function ResultsPage() {
               Your moments, found.
             </h1>
             <p className="mt-5 text-base text-[#4b4843]">
-              {data.items.length} matching {data.items.length === 1 ? 'photograph' : 'photographs'}
+              {data.total} matching {data.total === 1 ? 'photograph' : 'photographs'}
             </p>
             <p className="mt-2 text-sm text-neutral-500">
               Available until {new Date(data.expiresAt).toLocaleString()}
@@ -176,7 +179,7 @@ export default function ResultsPage() {
           animate="visible"
           variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.045 } } }}
         >
-          {data.items.map((item, index) => (
+          {items.map((item, index) => (
             <motion.button
               key={item.photoId}
               variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0 } }}
@@ -217,9 +220,18 @@ export default function ResultsPage() {
             </motion.button>
           ))}
         </motion.div>
+        {results.hasNextPage && (
+          <button
+            className="button-secondary mx-auto mt-8 block"
+            disabled={results.isFetchingNextPage}
+            onClick={() => void results.fetchNextPage()}
+          >
+            {results.isFetchingNextPage ? 'Loading…' : 'Load more photographs'}
+          </button>
+        )}
         {viewer !== undefined && (
           <PhotoViewer
-            items={data.items}
+            items={items}
             index={viewer}
             onIndex={setViewer}
             onClose={() => setViewer(undefined)}
@@ -231,10 +243,8 @@ export default function ResultsPage() {
             <div>
               <p className="font-medium">{selected.size} photos selected</p>
               <div className="mt-1 flex gap-3 text-xs text-white/70">
-                <button
-                  onClick={() => setSelected(new Set(data.items.map((item) => item.photoId)))}
-                >
-                  Select all matches
+                <button onClick={() => setSelected(new Set(items.map((item) => item.photoId)))}>
+                  Select all loaded matches
                 </button>
                 <button onClick={() => setSelected(new Set())}>Deselect all</button>
               </div>

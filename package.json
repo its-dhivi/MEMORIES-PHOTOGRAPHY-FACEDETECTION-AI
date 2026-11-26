@@ -6,6 +6,23 @@
   "engines": {
     "node": ">=22.12.0"
   },
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "^8.0.0",
+      "effect": "^3.22.1",
+      "ajv@^8.0.0": "^8.18.0",
+      "fast-xml-parser": "^5.12.0",
+      "file-type": "^21.3.2",
+      "glob": "^14.0.2",
+      "js-yaml": "^4.3.2",
+      "lodash": "^4.18.0",
+      "minimatch": "^11.0.1",
+      "multer": "^2.5.0",
+      "path-to-regexp": "^8.4.0",
+      "picomatch@^4.0.0": "^4.0.4",
+      "webpack@^5.49.0": "^5.104.1"
+    }
+  },
   "scripts": {
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --parallel --filter @memories/web --filter @memories/api dev",
@@ -18,7 +35,8 @@
     "db:generate": "pnpm --filter @memories/api prisma:generate",
     "db:migrate": "pnpm --filter @memories/api prisma:migrate",
     "db:seed": "pnpm --filter @memories/api prisma:seed",
-    "env:check": "node scripts/verify-env.mjs"
+    "env:check": "node scripts/verify-env.mjs",
+    "env:check:production": "node scripts/verify-env.mjs --production"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

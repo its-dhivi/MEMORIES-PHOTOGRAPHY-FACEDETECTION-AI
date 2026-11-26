@@ -17,6 +17,10 @@ function backendPath(parts: string[]): string | null {
     [/^searches\/([0-9a-f-]+)$/, (m) => `/public/searches/${m[1]}`],
     [/^searches\/([0-9a-f-]+)\/results$/, (m) => `/public/searches/${m[1]}/results`],
     [/^searches\/([0-9a-f-]+)\/download-all$/, (m) => `/public/searches/${m[1]}/download-all`],
+    [
+      /^searches\/([0-9a-f-]+)\/download-selected$/,
+      (m) => `/public/searches/${m[1]}/download-selected`,
+    ],
     [/^photos\/([0-9a-f-]+)\/download$/, (m) => `/public/photos/${m[1]}/download`],
     [/^download-jobs\/([0-9a-f-]+)$/, (m) => `/public/download-jobs/${m[1]}`],
   ];
@@ -52,7 +56,7 @@ async function proxy(request: NextRequest, context: Context) {
   const isSessionCreate =
     request.method === 'POST' && /^\/public\/events\/[^/]+\/session$/.test(target);
   const actualTarget = isSessionCreate ? `${target}s` : target;
-  const response = await fetch(`${API_URL}${actualTarget}`, {
+  const response = await fetch(`${API_URL}${actualTarget}${request.nextUrl.search}`, {
     method: request.method,
     headers,
     ...(request.method === 'GET' ? {} : { body: await request.arrayBuffer() }),

@@ -56,6 +56,10 @@ test('mocked guest UI completes PIN, consent, selfie, and results flow', async (
     if (path.endsWith('/results'))
       return json({
         searchId: '11111111-1111-4111-8111-111111111111',
+        page: 1,
+        pageSize: 100,
+        total: 1,
+        hasMore: false,
         expiresAt: '2026-12-01T13:00:00.000Z',
         downloadsEnabled: true,
         downloadAllEnabled: true,

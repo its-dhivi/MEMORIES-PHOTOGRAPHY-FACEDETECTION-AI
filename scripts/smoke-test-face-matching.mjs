@@ -78,6 +78,16 @@ try {
       downloadAllEnabled: true,
     }),
   });
+  await admin(`/events/${event.id}/settings/approve-matching`, {
+    method: 'POST',
+    body: JSON.stringify({
+      threshold: 0.64,
+      modelVersion: rootEnv.FACE_MODEL_VERSION,
+      preprocessingVersion: rootEnv.FACE_PREPROCESSING_VERSION ?? 'auraface-rgb-112-v1',
+      source: 'smoke-test',
+      evaluationResults: { note: 'Local same-image pipeline test only' },
+    }),
+  });
 
   const imageResponse = await fetch(
     'https://raw.githubusercontent.com/opencv/opencv/master/samples/data/lena.jpg',

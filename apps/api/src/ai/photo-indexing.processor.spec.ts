@@ -45,6 +45,8 @@ describe('PhotoIndexingProcessor', () => {
       analyzePhoto: jest.fn().mockResolvedValue({
         modelName: 'licensed-model',
         modelVersion: 'v1',
+        preprocessingVersion: 'auraface-rgb-112-v1',
+        detectionPipelineVersion: 'phase5-v2',
         embeddingDimension: 512,
         width: 1000,
         height: 800,
@@ -63,7 +65,13 @@ describe('PhotoIndexingProcessor', () => {
       opts: { attempts: 3 },
     } as Job<{ photoId: string; eventId: string; processingJobId: string }>);
 
-    expect(deleteFaces).toHaveBeenCalledWith({ where: { photoId: 'photo-a' } });
+    expect(deleteFaces).toHaveBeenCalledWith({
+      where: {
+        photoId: 'photo-a',
+        modelVersion: 'v1',
+        preprocessingVersion: 'auraface-rgb-112-v1',
+      },
+    });
     expect(
       photoUpdate.mock.calls.some(
         ([input]) =>

@@ -30,6 +30,9 @@ export class PublicEventsService {
             accessExpiresAt: true,
             accessPinHash: true,
             consentVersion: true,
+            matchingApprovedAt: true,
+            matchingModelVersion: true,
+            matchingPreprocessingVersion: true,
           },
         },
         coverPhoto: { select: { previewKey: true, thumbnailKey: true } },
@@ -43,6 +46,10 @@ export class PublicEventsService {
       (!event.settings?.accessExpiresAt || event.settings.accessExpiresAt > now);
     const coverKey = event.coverPhoto?.previewKey ?? event.coverPhoto?.thumbnailKey;
     const model = await this.ai.readiness();
+    const approved =
+      Boolean(event.settings?.matchingApprovedAt) &&
+      event.settings?.matchingModelVersion === model.modelVersion &&
+      event.settings?.matchingPreprocessingVersion === model.preprocessingVersion;
     return {
       title: event.title,
       type: event.type,
@@ -53,13 +60,15 @@ export class PublicEventsService {
       coverUrl: coverKey ? await this.storage.signedReadUrl(coverKey) : null,
       available,
       pinRequired: Boolean(event.settings?.accessPinHash),
-      finderAvailable: available && model.ready,
+      finderAvailable: available && model.ready && approved,
       consentVersion: event.settings?.consentVersion,
       finderMessage:
-        available && model.ready
+        available && model.ready && approved
           ? 'Face matching is available after creating an event-scoped session and granting consent.'
           : available
-            ? 'Face matching is temporarily unavailable while the recognition model is offline.'
+            ? model.ready
+              ? 'Face matching is awaiting a validated event threshold and administrator approval.'
+              : 'Face matching is temporarily unavailable while the recognition model is offline.'
             : 'Photo finding is not currently available for this event.',
     };
   }

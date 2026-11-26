@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -6,20 +7,42 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
-import { AuditActorType, EventStatus, Prisma, StudioRole } from '@prisma/client';
+import {
+  AuditActorType,
+  DownloadJobStatus,
+  EventStatus,
+  Prisma,
+  SearchStatus,
+  StudioRole,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../infrastructure/storage.service';
 import { StudioAccessService } from '../auth/studio-access.service';
 import type {
   CreateEventDto,
+  ApproveMatchingDto,
   ListEventsDto,
   UpdateEventDto,
   UpdateEventSettingsDto,
 } from './events.dto';
 
 const WRITE_ROLES = [StudioRole.OWNER, StudioRole.ADMIN, StudioRole.PHOTOGRAPHER];
+const APPROVAL_ROLES = [StudioRole.OWNER, StudioRole.ADMIN];
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
 
 @Injectable()
 export class EventsService {
@@ -290,6 +313,178 @@ export class EventsService {
           userId,
           actorType: AuditActorType.USER,
           action: 'event.settings_updated',
+          resourceType: 'EventSettings',
+          resourceId: eventId,
+        },
+      }),
+    ]);
+    return this.getSettings(userId, eventId);
+  }
+
+  async approveMatching(userId: string, eventId: string, input: ApproveMatchingDto) {
+    const { studioId } = await this.access.requireEventAccess(userId, eventId, APPROVAL_ROLES);
+    const settings = await this.prisma.eventSettings.findUnique({ where: { eventId } });
+    if (!settings) throw new NotFoundException('Event settings not found');
+    const expectedModel = this.config.getOrThrow<string>('FACE_MODEL_VERSION');
+    const expectedPreprocessing = this.config.get<string>(
+      'FACE_PREPROCESSING_VERSION',
+      'auraface-rgb-112-v1',
+    );
+    if (
+      input.modelVersion !== expectedModel ||
+      input.preprocessingVersion !== expectedPreprocessing
+    ) {
+      throw new BadRequestException('Approval must match the active recognition pipeline');
+    }
+    const evidence = input.evaluationResults;
+    const smokeOnly = input.source === 'smoke-test' && process.env.NODE_ENV !== 'production';
+    if (process.env.NODE_ENV === 'production') {
+      if (/synthetic|controlface|smoke/i.test(input.source)) {
+        throw new BadRequestException(
+          'Production approval requires representative consented event data',
+        );
+      }
+      const secret = this.config.getOrThrow<string>('EVALUATION_SIGNING_SECRET');
+      const payload = {
+        eventId,
+        threshold: input.threshold,
+        modelVersion: input.modelVersion,
+        preprocessingVersion: input.preprocessingVersion,
+        source: input.source,
+        evaluationResults: evidence,
+      };
+      const expected = createHmac('sha256', secret).update(canonicalJson(payload)).digest();
+      const provided = Buffer.from(input.evidenceSignature ?? '', 'hex');
+      if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+        throw new BadRequestException(
+          'Production approval requires a trusted signed evaluation artifact',
+        );
+      }
+      const events = Number(evidence.events);
+      const queries = Number(evidence.queries);
+      const recall = Number(evidence.photo_recall);
+      const precisionLower = Number(evidence.photo_precision_95pct_wilson_lower);
+      const farInterval = evidence.false_accept_rate_95pct_wilson;
+      const farUpper = Array.isArray(farInterval) ? Number(farInterval[1]) : Number.NaN;
+      if (
+        ![events, queries, recall, precisionLower, farUpper].every(Number.isFinite) ||
+        events < 3 ||
+        queries < 1000 ||
+        recall < 0.5 ||
+        precisionLower < 0.99 ||
+        farUpper > 0.001
+      ) {
+        throw new BadRequestException(
+          'Gallery evaluation does not meet the production event, sample, precision, recall, and false-acceptance criteria',
+        );
+      }
+    } else if (!smokeOnly) {
+      const truePositive = Number(evidence.true_positive);
+      const falsePositive = Number(evidence.false_positive);
+      const trueNegative = Number(evidence.true_negative);
+      const falseNegative = Number(evidence.false_negative);
+      const precision = truePositive / (truePositive + falsePositive);
+      const far = falsePositive / (falsePositive + trueNegative);
+      if (
+        ![truePositive, falsePositive, trueNegative, falseNegative].every(Number.isSafeInteger) ||
+        truePositive < 10 ||
+        falsePositive < 0 ||
+        trueNegative < 1000 ||
+        falseNegative < 0 ||
+        precision < 0.99 ||
+        far > 0.001
+      ) {
+        throw new BadRequestException('Evaluation evidence does not meet approval requirements');
+      }
+    }
+    await this.prisma.$transaction([
+      this.prisma.eventSettings.update({
+        where: { eventId },
+        data: {
+          previousSimilarityThreshold: settings.similarityThreshold,
+          similarityThreshold: input.threshold,
+          matchingApprovedAt: new Date(),
+          matchingApprovedById: userId,
+          matchingModelVersion: input.modelVersion,
+          matchingPreprocessingVersion: input.preprocessingVersion,
+          matchingApprovalEvidence: {
+            source: input.source,
+            evaluationResults: evidence as Prisma.InputJsonObject,
+          },
+        },
+      }),
+      this.prisma.photoSearch.updateMany({
+        where: { eventId, status: SearchStatus.COMPLETED },
+        data: { status: SearchStatus.EXPIRED },
+      }),
+      this.prisma.guestDownloadJob.updateMany({
+        where: {
+          eventId,
+          status: {
+            in: [
+              DownloadJobStatus.PENDING,
+              DownloadJobStatus.PROCESSING,
+              DownloadJobStatus.COMPLETED,
+            ],
+          },
+        },
+        data: { status: DownloadJobStatus.EXPIRED },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          studioId,
+          eventId,
+          userId,
+          actorType: AuditActorType.USER,
+          action: 'event.face_matching_approved',
+          resourceType: 'EventSettings',
+          resourceId: eventId,
+          metadata: { modelVersion: input.modelVersion, threshold: input.threshold },
+        },
+      }),
+    ]);
+    return this.getSettings(userId, eventId);
+  }
+
+  async revokeMatching(userId: string, eventId: string) {
+    const { studioId } = await this.access.requireEventAccess(userId, eventId, APPROVAL_ROLES);
+    const settings = await this.prisma.eventSettings.findUnique({ where: { eventId } });
+    if (!settings) throw new NotFoundException('Event settings not found');
+    await this.prisma.$transaction([
+      this.prisma.eventSettings.update({
+        where: { eventId },
+        data: {
+          similarityThreshold: settings.previousSimilarityThreshold ?? settings.similarityThreshold,
+          matchingApprovedAt: null,
+          matchingApprovedById: null,
+          matchingModelVersion: null,
+          matchingPreprocessingVersion: null,
+        },
+      }),
+      this.prisma.photoSearch.updateMany({
+        where: { eventId, status: SearchStatus.COMPLETED },
+        data: { status: SearchStatus.EXPIRED },
+      }),
+      this.prisma.guestDownloadJob.updateMany({
+        where: {
+          eventId,
+          status: {
+            in: [
+              DownloadJobStatus.PENDING,
+              DownloadJobStatus.PROCESSING,
+              DownloadJobStatus.COMPLETED,
+            ],
+          },
+        },
+        data: { status: DownloadJobStatus.EXPIRED },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          studioId,
+          eventId,
+          userId,
+          actorType: AuditActorType.USER,
+          action: 'event.face_matching_revoked',
           resourceType: 'EventSettings',
           resourceId: eventId,
         },

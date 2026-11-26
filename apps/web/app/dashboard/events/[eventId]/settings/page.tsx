@@ -22,6 +22,15 @@ export default function EventSettingsPage() {
   const [accessPin, setAccessPin] = useState('');
   const [clearPin, setClearPin] = useState(false);
   const [status, setStatus] = useState<string>();
+  const [calibration, setCalibration] = useState<{
+    threshold: number;
+    modelVersion: string;
+    preprocessingVersion: string;
+    source: string;
+    evaluationResults: Record<string, unknown>;
+    evidenceSignature: string;
+  }>();
+  const [calibrationError, setCalibrationError] = useState<string>();
   const updateEvent = useMutation({
     mutationFn: (values: EventFormValues) =>
       eventsApi.update(eventId, {
@@ -47,6 +56,43 @@ export default function EventSettingsPage() {
     mutationFn: () => eventsApi.remove(eventId),
     onSuccess: () => router.replace('/dashboard/events'),
   });
+  const approveMatching = useMutation({
+    mutationFn: () => eventsApi.approveMatching(eventId, calibration!),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['event', eventId, 'settings'] }),
+  });
+  const revokeMatching = useMutation({
+    mutationFn: () => eventsApi.revokeMatching(eventId),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['event', eventId, 'settings'] }),
+  });
+  async function loadCalibration(file?: File) {
+    if (!file) return;
+    try {
+      const artifact = JSON.parse(await file.text()) as Record<string, unknown>;
+      if (
+        typeof artifact.threshold !== 'number' ||
+        typeof artifact.modelVersion !== 'string' ||
+        typeof artifact.preprocessingVersion !== 'string' ||
+        typeof artifact.source !== 'string' ||
+        typeof artifact.evidenceSignature !== 'string' ||
+        !artifact.evaluationResults ||
+        typeof artifact.evaluationResults !== 'object'
+      ) {
+        throw new Error('Upload a signed evaluation artifact prepared by a trusted operator.');
+      }
+      setCalibration({
+        threshold: artifact.threshold,
+        modelVersion: artifact.modelVersion,
+        preprocessingVersion: artifact.preprocessingVersion,
+        source: artifact.source,
+        evaluationResults: artifact.evaluationResults as Record<string, unknown>,
+        evidenceSignature: artifact.evidenceSignature,
+      });
+      setCalibrationError(undefined);
+    } catch (error) {
+      setCalibration(undefined);
+      setCalibrationError(error instanceof Error ? error.message : 'Invalid calibration report');
+    }
+  }
   if (event.isLoading || settings.isLoading)
     return <div className="h-96 animate-pulse rounded-xl bg-stone-200" />;
   if (!event.data)
@@ -93,6 +139,65 @@ export default function EventSettingsPage() {
           />
         </section>
         <section className="space-y-6">
+          <div className="rounded-xl border bg-white p-6">
+            <h3 className="font-serif text-2xl">Face matching approval</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Guest matching stays unavailable until an owner or admin approves a signed gallery
+              evaluation for this event and model version. Production approval checks held-out
+              event/query counts, a precision confidence bound, recall, and false matches per guest
+              search.
+            </p>
+            <p className="mt-3 text-sm">
+              Status: {settings.data?.matchingApprovedAt ? 'Approved' : 'Awaiting approval'}
+            </p>
+            <p className="text-sm">Threshold: {settings.data?.similarityThreshold ?? 'not set'}</p>
+            {settings.data?.matchingApprovedAt ? (
+              <button
+                className="mt-4 rounded bg-red-700 px-4 py-2 text-sm text-white"
+                disabled={revokeMatching.isPending}
+                onClick={() => {
+                  if (window.confirm('Disable guest face matching for this event?'))
+                    revokeMatching.mutate();
+                }}
+              >
+                Revoke approval and disable matching
+              </button>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <label className="block text-sm">
+                  Signed gallery evaluation artifact (JSON)
+                  <input
+                    className="mt-2 block w-full"
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={(event) => void loadCalibration(event.target.files?.[0])}
+                  />
+                </label>
+                {calibration && (
+                  <p className="text-sm">
+                    Proposed {calibration.threshold.toFixed(3)} from {calibration.source}
+                  </p>
+                )}
+                <button
+                  className="rounded bg-charcoal px-4 py-2 text-sm text-white disabled:opacity-50"
+                  disabled={!calibration || approveMatching.isPending}
+                  onClick={() => {
+                    if (window.confirm('Approve this threshold for guest searches in this event?'))
+                      approveMatching.mutate();
+                  }}
+                >
+                  Approve threshold
+                </button>
+              </div>
+            )}
+            {(calibrationError || approveMatching.error || revokeMatching.error) && (
+              <p role="alert" className="mt-3 text-sm text-red-700">
+                {calibrationError ??
+                  approveMatching.error?.message ??
+                  revokeMatching.error?.message}
+              </p>
+            )}
+          </div>
           <div className="rounded-xl border bg-white p-6">
             <h3 className="font-serif text-2xl">Guest access</h3>
             <p className="mt-1 text-sm text-slate-500">

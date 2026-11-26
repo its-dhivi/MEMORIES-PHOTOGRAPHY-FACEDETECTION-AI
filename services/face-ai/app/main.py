@@ -38,6 +38,7 @@ class HealthResponse(BaseModel):
     device: str
     model_name: str
     model_version: str
+    preprocessing_version: str
     providers: list[str]
     error: str | None = None
 
@@ -55,6 +56,7 @@ async def ready() -> HealthResponse:
         device=settings.face_device,
         model_name=settings.face_model_name,
         model_version=settings.face_model_version,
+        preprocessing_version=settings.face_preprocessing_version,
         providers=manager.providers,
         error=manager.error,
     )
@@ -68,13 +70,17 @@ async def compatibility_health() -> dict[str, object]:
     return {"status": "ok", "model_loaded": manager.ready, "model": settings.face_model_name}
 
 
-async def analyze_payload(file: UploadFile) -> AnalysisResponse:
+async def analyze_payload(
+    file: UploadFile, *, tiled: bool = False, diagnostics: bool = False
+) -> AnalysisResponse:
     image = decode_image(await file.read(settings.max_image_bytes + 1), settings)
     if not manager.ready:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Face models are unavailable")
     async with inference_slots:
         try:
-            return await asyncio.to_thread(manager.analyze, image)
+            return await asyncio.to_thread(
+                manager.analyze, image, tiled=tiled, include_diagnostics=diagnostics
+            )
         except RuntimeError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
@@ -85,7 +91,31 @@ async def analyze_payload(file: UploadFile) -> AnalysisResponse:
     dependencies=[Depends(require_internal_token)],
 )
 async def analyze(file: UploadFile = File(...)) -> AnalysisResponse:
-    return await analyze_payload(file)
+    return await analyze_payload(file, tiled=True)
+
+
+@app.post("/internal/v1/faces/diagnose", dependencies=[Depends(require_internal_token)])
+async def diagnose(file: UploadFile = File(...)) -> dict[str, object]:
+    analysis = await analyze_payload(file, tiled=True, diagnostics=True)
+    return {
+        "modelVersion": analysis.model_version,
+        "preprocessingVersion": analysis.preprocessing_version,
+        "detectionPipelineVersion": analysis.detection_pipeline_version,
+        "width": analysis.width,
+        "height": analysis.height,
+        "faces": [
+            {
+                "boundingBox": face.bounding_box.model_dump(),
+                "detectionConfidence": face.detection_confidence,
+                "qualityScore": face.quality_score,
+                "qualityStatus": face.quality_status,
+                "landmarks": face.landmarks,
+                "alignedPreview": face.aligned_preview,
+                "embeddingStatus": "GENERATED" if face.embedding is not None else "REJECTED",
+            }
+            for face in analysis.faces
+        ],
+    }
 
 
 @app.post(

@@ -5,6 +5,7 @@ import {
   Headers,
   Param,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -75,8 +76,12 @@ export class GuestSearchController {
   @Get('searches/:searchId/results')
   @ApiHeader({ name: 'X-Guest-Session', required: true })
   @ApiOperation({ summary: 'Get expiring results owned by the guest session' })
-  results(@Param('searchId') searchId: string, @Headers('x-guest-session') token: string) {
-    return this.searches.results(searchId, token);
+  results(
+    @Param('searchId') searchId: string,
+    @Headers('x-guest-session') token: string,
+    @Query('page') page = '1',
+  ) {
+    return this.searches.results(searchId, token, Number(page));
   }
 
   @Post('photos/:photoId/download')

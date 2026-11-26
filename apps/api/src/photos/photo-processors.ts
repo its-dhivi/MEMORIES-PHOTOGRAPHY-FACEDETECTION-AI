@@ -33,6 +33,7 @@ export class ThumbnailProcessor extends WorkerHost {
   async process(job: Job<ThumbnailJobData>): Promise<void> {
     const photo = await this.prisma.photo.findUnique({ where: { id: job.data.photoId } });
     if (!photo || photo.deletedAt) return;
+    const reindexing = Boolean(photo.processedAt && photo.modelVersion);
     await this.prisma.$transaction([
       this.prisma.processingJob.update({
         where: { id: job.data.processingJobId },
@@ -40,7 +41,7 @@ export class ThumbnailProcessor extends WorkerHost {
       }),
       this.prisma.photo.update({
         where: { id: photo.id },
-        data: { status: PhotoStatus.PROCESSING },
+        data: { status: reindexing ? PhotoStatus.READY : PhotoStatus.PROCESSING },
       }),
     ]);
     const temporaryPath = join(tmpdir(), `memories-${photo.id}-${randomUUID()}`);
@@ -64,7 +65,7 @@ export class ThumbnailProcessor extends WorkerHost {
           .toBuffer(),
         source
           .clone()
-          .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+          .resize(4096, 4096, { fit: 'inside', withoutEnlargement: true })
           .jpeg({ quality: 90, mozjpeg: true })
           .toBuffer(),
       ]);
@@ -87,7 +88,7 @@ export class ThumbnailProcessor extends WorkerHost {
             derivativeStatus: 'READY',
             width: metadata.width ?? null,
             height: metadata.height ?? null,
-            status: PhotoStatus.QUEUED,
+            status: reindexing ? PhotoStatus.READY : PhotoStatus.QUEUED,
           },
         }),
         this.prisma.processingJob.update({
@@ -120,7 +121,10 @@ export class ThumbnailProcessor extends WorkerHost {
       } catch {
         await this.prisma.photo.update({
           where: { id: photo.id },
-          data: { status: PhotoStatus.UPLOADED, failureCode: 'AI_QUEUE_UNAVAILABLE' },
+          data: {
+            status: reindexing ? PhotoStatus.READY : PhotoStatus.UPLOADED,
+            failureCode: 'AI_QUEUE_UNAVAILABLE',
+          },
         });
       }
     } catch (error) {
@@ -138,7 +142,11 @@ export class ThumbnailProcessor extends WorkerHost {
         this.prisma.photo.update({
           where: { id: photo.id },
           data: {
-            status: finalAttempt ? PhotoStatus.FAILED : PhotoStatus.QUEUED,
+            status: reindexing
+              ? PhotoStatus.READY
+              : finalAttempt
+                ? PhotoStatus.FAILED
+                : PhotoStatus.QUEUED,
             failureCode: finalAttempt ? 'DERIVATIVE_GENERATION_FAILED' : null,
             failureMessage: finalAttempt ? 'Image preview generation failed' : null,
             derivativeStatus: finalAttempt ? 'UNSUPPORTED' : 'PROCESSING',

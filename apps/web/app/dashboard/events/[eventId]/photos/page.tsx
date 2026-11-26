@@ -1,6 +1,7 @@
 'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, RefreshCw, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { BulkUploader } from '@/components/bulk-uploader';
@@ -136,6 +137,13 @@ export default function EventPhotosPage() {
                   )}
                 </div>
                 <div className="absolute right-2 top-2 flex gap-1 opacity-90 transition sm:opacity-0 sm:group-hover:opacity-100">
+                  <Link
+                    href={`/dashboard/events/${eventId}/photos/${photo.id}/diagnostics`}
+                    className="rounded bg-white px-2 py-1 text-xs text-stone-900"
+                    aria-label={`Diagnose ${photo.originalFilename}`}
+                  >
+                    Diagnose
+                  </Link>
                   {photo.status === 'FAILED' && (
                     <button
                       onClick={() => retry.mutate(photo.id)}

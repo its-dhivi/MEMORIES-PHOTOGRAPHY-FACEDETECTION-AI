@@ -3,6 +3,7 @@ const { Queue } = require('bullmq');
 
 async function main() {
   const modelVersion = process.env.FACE_MODEL_VERSION;
+  const detectionVersion = process.env.FACE_DETECTION_PIPELINE_VERSION || 'phase5-v2';
   if (!modelVersion) throw new Error('FACE_MODEL_VERSION is required');
   const url = new URL(process.env.REDIS_URL);
   const connection = {
@@ -18,10 +19,18 @@ async function main() {
   const thumbnails = new Queue('thumbnail-generation', { connection });
   try {
     const photos = await prisma.photo.findMany({
-      where: { deletedAt: null, modelVersion: { not: modelVersion } },
-      select: { id: true, eventId: true, aiInputKey: true },
+      where: {
+        deletedAt: null,
+        processedAt: { not: null },
+        OR: [
+          { modelVersion: { not: modelVersion } },
+          { detectionVersion: null },
+          { detectionVersion: { not: detectionVersion } },
+        ],
+      },
+      select: { id: true, eventId: true, aiInputKey: true, detectionVersion: true },
     });
-    console.log(`Photos needing ${modelVersion}: ${photos.length}`);
+    console.log(`Photos needing ${modelVersion} / ${detectionVersion}: ${photos.length}`);
     if (!process.argv.includes('--apply')) return;
     for (const photo of photos) {
       const job = await prisma.processingJob.findFirst({
@@ -29,22 +38,20 @@ async function main() {
         orderBy: { createdAt: 'desc' },
       });
       if (!job) throw new Error(`No processing job for photo ${photo.id}`);
-      const thumbnailJob = photo.aiInputKey
+      if (['PENDING', 'ACTIVE', 'RETRYING'].includes(job.status)) continue;
+      const needsDerivative = photo.detectionVersion !== detectionVersion || !photo.aiInputKey;
+      const thumbnailJob = !needsDerivative
         ? null
         : await prisma.processingJob.findFirst({
             where: { photoId: photo.id, type: 'THUMBNAIL_GENERATE' },
             orderBy: { createdAt: 'desc' },
           });
-      if (!photo.aiInputKey && !thumbnailJob)
+      if (needsDerivative && !thumbnailJob)
         throw new Error(`No derivative job for photo ${photo.id}`);
       await prisma.$transaction([
         prisma.processingJob.update({
           where: { id: job.id },
           data: { status: 'PENDING', error: Prisma.JsonNull, completedAt: null },
-        }),
-        prisma.photo.update({
-          where: { id: photo.id },
-          data: { status: 'QUEUED', failureCode: null, failureMessage: null },
         }),
         ...(thumbnailJob
           ? [

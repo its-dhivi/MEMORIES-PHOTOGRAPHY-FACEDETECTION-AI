@@ -8,9 +8,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     ai_internal_token: str = Field(min_length=32)
-    face_model_provider: Literal["onnx"] = "onnx"
+    face_model_provider: Literal["onnx", "sface"] = "onnx"
     face_model_name: str = "operator-supplied"
     face_model_version: str = Field(min_length=1)
+    face_preprocessing_version: str = "auraface-rgb-112-v1"
+    face_detection_pipeline_version: str = "phase5-v2"
     face_recognition_model_path: str
     face_recognition_input_normalization: Literal["none", "minus_one_one"] = "minus_one_one"
     face_detection_model_path: str
@@ -19,6 +21,9 @@ class Settings(BaseSettings):
     face_device: Literal["cpu", "gpu"] = "cpu"
     face_detection_input_size: int = Field(default=640, ge=160, le=2048)
     face_detection_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
+    face_detection_global_max_side: int = Field(default=1600, ge=640, le=4096)
+    face_detection_tile_size: int = Field(default=1280, ge=640, le=2048)
+    face_detection_max_tiles: int = Field(default=16, ge=1, le=64)
     face_min_size_pixels: int = Field(default=48, ge=16)
     face_min_blur_variance: float = Field(default=35.0, ge=0.0)
     face_min_exposure: float = Field(default=35.0, ge=0.0, le=255.0)

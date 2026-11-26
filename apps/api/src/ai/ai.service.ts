@@ -16,6 +16,8 @@ export interface AiFace {
 export interface AiAnalysis {
   modelName: string;
   modelVersion: string;
+  preprocessingVersion: string;
+  detectionPipelineVersion: string;
   embeddingDimension: number;
   width: number;
   height: number;
@@ -25,7 +27,25 @@ export interface AiAnalysis {
 export interface AiReadiness {
   ready: boolean;
   modelVersion?: string | undefined;
+  preprocessingVersion?: string | undefined;
   providers?: string[] | undefined;
+}
+
+export interface AiDiagnostic {
+  modelVersion: string;
+  preprocessingVersion: string;
+  detectionPipelineVersion: string;
+  width: number;
+  height: number;
+  faces: {
+    boundingBox: { x: number; y: number; width: number; height: number };
+    detectionConfidence: number;
+    qualityScore: number;
+    qualityStatus: string;
+    landmarks: number[][] | null;
+    alignedPreview: string | null;
+    embeddingStatus: string;
+  }[];
 }
 
 @Injectable()
@@ -33,11 +53,15 @@ export class AiService {
   constructor(private readonly config: ConfigService) {}
 
   analyzePhoto(image: Uint8Array, mimeType: string, filename: string): Promise<AiAnalysis> {
-    return this.request('/internal/v1/faces/analyze', image, mimeType, filename);
+    return this.request<AiAnalysis>('/internal/v1/faces/analyze', image, mimeType, filename);
   }
 
   embedSelfie(image: Uint8Array, mimeType: string, filename: string): Promise<AiAnalysis> {
-    return this.request('/internal/v1/faces/embed-selfie', image, mimeType, filename);
+    return this.request<AiAnalysis>('/internal/v1/faces/embed-selfie', image, mimeType, filename);
+  }
+
+  diagnosePhoto(image: Uint8Array, mimeType: string, filename: string): Promise<AiDiagnostic> {
+    return this.request<AiDiagnostic>('/internal/v1/faces/diagnose', image, mimeType, filename);
   }
 
   async readiness(): Promise<AiReadiness> {
@@ -49,11 +73,13 @@ export class AiService {
       const body = (await response.json()) as {
         ready?: boolean;
         model_version?: string;
+        preprocessing_version?: string;
         providers?: string[];
       };
       return {
         ready: body.ready === true,
         modelVersion: body.model_version,
+        preprocessingVersion: body.preprocessing_version,
         providers: body.providers,
       };
     } catch {
@@ -61,12 +87,12 @@ export class AiService {
     }
   }
 
-  private async request(
+  private async request<T extends AiAnalysis | AiDiagnostic>(
     path: string,
     image: Uint8Array,
     mimeType: string,
     filename: string,
-  ): Promise<AiAnalysis> {
+  ): Promise<T> {
     const form = new FormData();
     const owned = new Uint8Array(image).buffer;
     form.append('file', new Blob([owned], { type: mimeType }), filename);
@@ -89,8 +115,14 @@ export class AiService {
     }
     if (!response.ok)
       throw new ServiceUnavailableException('AI service could not process the image');
-    const analysis = (await response.json()) as AiAnalysis;
-    if (analysis.embeddingDimension !== 512 || !Array.isArray(analysis.faces)) {
+    const analysis = (await response.json()) as T;
+    if (
+      ('embeddingDimension' in analysis && analysis.embeddingDimension !== 512) ||
+      !analysis.modelVersion ||
+      !analysis.preprocessingVersion ||
+      !analysis.detectionPipelineVersion ||
+      !Array.isArray(analysis.faces)
+    ) {
       throw new ServiceUnavailableException('AI service returned an incompatible model response');
     }
     return analysis;

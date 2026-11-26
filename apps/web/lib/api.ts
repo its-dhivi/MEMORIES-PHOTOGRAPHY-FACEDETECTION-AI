@@ -36,7 +36,7 @@ export async function apiRequest<T>(
   retry = true,
 ): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body) headers.set('Content-Type', 'application/json');
+  if (typeof init.body === 'string') headers.set('Content-Type', 'application/json');
   const csrf = csrfToken();
   if (csrf) headers.set('X-CSRF-Token', decodeURIComponent(csrf));
   const response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include' });
@@ -114,6 +114,13 @@ export const eventsApi = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  approveMatching: (id: string, input: Record<string, unknown>) =>
+    apiRequest<EventSettings>(`/events/${id}/settings/approve-matching`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  revokeMatching: (id: string) =>
+    apiRequest<EventSettings>(`/events/${id}/settings/revoke-matching`, { method: 'POST' }),
   qr: (id: string) => apiRequest<QrAssets>(`/events/${id}/qr`),
 };
 
@@ -165,7 +172,62 @@ export const photosApi = {
   remove: (id: string) => apiRequest<void>(`/photos/${id}`, { method: 'DELETE' }),
   reprocess: (id: string) =>
     apiRequest<{ jobId: string; queued: boolean }>(`/photos/${id}/reprocess`, { method: 'POST' }),
+  diagnostics: (eventId: string, photoId: string) =>
+    apiRequest<FaceDiagnostic>(`/events/${eventId}/photos/${photoId}/diagnostics`),
+  probe: (eventId: string, photoId: string, selfie: File) => {
+    const body = new FormData();
+    body.append('selfie', selfie);
+    return apiRequest<FaceProbe>(`/events/${eventId}/photos/${photoId}/diagnostics/probe`, {
+      method: 'POST',
+      body,
+    });
+  },
 };
+
+export interface FaceDiagnostic {
+  photoId: string;
+  filename: string;
+  status: string;
+  failureCode: string | null;
+  derivativeStatus: string;
+  modelVersion: string | null;
+  detectionVersion: string | null;
+  indexedFaces: Array<{
+    faceIndex: number;
+    modelVersion: string;
+    preprocessingVersion: string;
+    qualityStatus: string;
+  }>;
+  observation: {
+    modelVersion: string;
+    preprocessingVersion: string;
+    detectionPipelineVersion: string;
+    width: number;
+    height: number;
+    faces: Array<{
+      boundingBox: { x: number; y: number; width: number; height: number };
+      detectionConfidence: number;
+      qualityScore: number;
+      qualityStatus: string;
+      landmarks: number[][] | null;
+      alignedPreview: string | null;
+      embeddingStatus: string;
+    }>;
+  } | null;
+  previewUrl: string | null;
+  originalUrl: string;
+  reason: string | null;
+}
+
+export interface FaceProbe {
+  similarity: number | null;
+  threshold: number;
+  accepted: boolean;
+  reason: string;
+  modelVersion: string;
+  preprocessingVersion: string;
+  resultLimit: number;
+}
 
 export const processingApi = {
   jobs: (filters: Record<string, string | number | undefined> = {}) =>

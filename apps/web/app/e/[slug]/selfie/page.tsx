@@ -113,8 +113,8 @@ export default function SelfiePage() {
                 Look into the camera.
               </h1>
               <p className="mt-5 text-base leading-7 text-neutral-600">
-                Use even lighting and keep only your face visible. You can upload a photo instead of
-                using the camera.
+                Face a window or soft light, keep the camera steady at arm&apos;s length, and center
+                one unobstructed face. Avoid strong backlight. You can upload a portrait instead.
               </p>
               <button
                 onClick={continueSearch}

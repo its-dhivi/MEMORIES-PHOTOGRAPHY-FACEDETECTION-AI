@@ -33,6 +33,10 @@ export interface PublicEvent {
 }
 export interface SearchResults {
   searchId: string;
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
   expiresAt: string;
   downloadsEnabled: boolean;
   downloadAllEnabled: boolean;
@@ -74,7 +78,7 @@ export const guestApi = {
     request<{ id: string; status: string; failureCode: string | null; expiresAt: string }>(
       `/searches/${id}`,
     ),
-  results: (id: string) => request<SearchResults>(`/searches/${id}/results`),
+  results: (id: string, page = 1) => request<SearchResults>(`/searches/${id}/results?page=${page}`),
   download: (photoId: string, searchId: string) =>
     request<{ url: string; expiresInSeconds: number }>(`/photos/${photoId}/download`, {
       method: 'POST',

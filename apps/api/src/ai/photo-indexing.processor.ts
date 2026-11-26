@@ -40,6 +40,7 @@ export class PhotoIndexingProcessor extends WorkerHost {
       },
     });
     if (!photo || photo.status === PhotoStatus.DELETED) return;
+    const reindexing = Boolean(photo.processedAt && photo.modelVersion);
     await this.prisma.$transaction([
       this.prisma.processingJob.update({
         where: { id: job.data.processingJobId },
@@ -47,7 +48,7 @@ export class PhotoIndexingProcessor extends WorkerHost {
       }),
       this.prisma.photo.update({
         where: { id: photo.id },
-        data: { status: PhotoStatus.PROCESSING },
+        data: { status: reindexing ? PhotoStatus.READY : PhotoStatus.PROCESSING },
       }),
     ]);
     try {
@@ -55,23 +56,38 @@ export class PhotoIndexingProcessor extends WorkerHost {
       const image = await this.storage.readDerivative(photo.aiInputKey);
       const analysis = await this.ai.analyzePhoto(image, 'image/jpeg', `${photo.id}-ai-input.jpg`);
       const accepted = analysis.faces.filter((face) => face.embedding !== null);
+      if (
+        accepted.some(
+          (face) =>
+            face.embedding?.length !== analysis.embeddingDimension ||
+            face.embedding?.every(Number.isFinite) !== true,
+        )
+      ) {
+        throw new UnprocessableEntityException('AI service returned an invalid embedding');
+      }
       await this.prisma.$transaction(async (tx) => {
         const current = await tx.photo.findFirst({
           where: { id: photo.id, deletedAt: null, event: { deletedAt: null } },
           select: { id: true },
         });
         if (!current) return;
-        await tx.faceEmbedding.deleteMany({ where: { photoId: photo.id } });
+        await tx.faceEmbedding.deleteMany({
+          where: {
+            photoId: photo.id,
+            modelVersion: analysis.modelVersion,
+            preprocessingVersion: analysis.preprocessingVersion,
+          },
+        });
         for (const [faceIndex, face] of accepted.entries()) {
           const vector = `[${face.embedding!.join(',')}]`;
           await tx.$executeRaw(Prisma.sql`
             INSERT INTO "FaceEmbedding"
-              ("id", "eventId", "photoId", "faceIndex", "modelName", "modelVersion",
+              ("id", "eventId", "photoId", "faceIndex", "modelName", "modelVersion", "preprocessingVersion",
                "embedding", "boundingBox", "detectionConfidence", "qualityScore",
                "qualityStatus", "processedAt", "createdAt")
             VALUES
               (${randomUUID()}::uuid, ${photo.eventId}::uuid, ${photo.id}::uuid, ${faceIndex},
-               ${analysis.modelName}, ${analysis.modelVersion}, ${vector}::vector,
+               ${analysis.modelName}, ${analysis.modelVersion}, ${analysis.preprocessingVersion}, ${vector}::vector,
                ${JSON.stringify(face.boundingBox)}::jsonb, ${face.detectionConfidence},
                ${face.qualityScore}, ${face.qualityStatus}, NOW(), NOW())
           `);
@@ -80,11 +96,10 @@ export class PhotoIndexingProcessor extends WorkerHost {
           where: { id: photo.id },
           data: {
             status: PhotoStatus.READY,
-            width: analysis.width,
-            height: analysis.height,
             faceCount: analysis.faces.length,
             skippedFaceCount: analysis.faces.length - accepted.length,
             modelVersion: analysis.modelVersion,
+            detectionVersion: analysis.detectionPipelineVersion,
             processingDurationMs: Date.now() - started,
             processedAt: new Date(),
             failureCode: null,
@@ -111,7 +126,11 @@ export class PhotoIndexingProcessor extends WorkerHost {
         this.prisma.photo.updateMany({
           where: { id: photo.id, deletedAt: null },
           data: {
-            status: finalAttempt ? PhotoStatus.FAILED : PhotoStatus.QUEUED,
+            status: reindexing
+              ? PhotoStatus.READY
+              : finalAttempt
+                ? PhotoStatus.FAILED
+                : PhotoStatus.QUEUED,
             failureCode: finalAttempt ? code : null,
             failureMessage: finalAttempt ? 'Face indexing failed' : null,
           },

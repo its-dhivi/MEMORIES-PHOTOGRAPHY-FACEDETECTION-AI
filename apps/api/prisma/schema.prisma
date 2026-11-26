@@ -169,6 +169,12 @@ model EventSettings {
   selfieRetentionMinutes Int @default(0)
   searchResultTtlMinutes Int @default(60)
   similarityThreshold   Decimal @default(0.64) @db.Decimal(4, 3)
+  previousSimilarityThreshold Decimal? @db.Decimal(4, 3)
+  matchingApprovedAt    DateTime?
+  matchingApprovedById  String? @db.Uuid
+  matchingModelVersion  String? @db.VarChar(80)
+  matchingPreprocessingVersion String? @db.VarChar(80)
+  matchingApprovalEvidence Json?
   consentVersion        String @default("1.0") @db.VarChar(32)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -196,6 +202,7 @@ model Photo {
   faceCount       Int?
   skippedFaceCount Int?
   modelVersion    String? @db.VarChar(80)
+  detectionVersion String? @db.VarChar(80)
   processingDurationMs Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -247,6 +254,7 @@ model FaceEmbedding {
   faceIndex   Int
   modelName   String @db.VarChar(100)
   modelVersion String @db.VarChar(50)
+  preprocessingVersion String @default("auraface-rgb-112-v1") @db.VarChar(80)
   embedding   Unsupported("vector(512)")
   boundingBox Json
   detectionConfidence Decimal @db.Decimal(6, 5)
@@ -256,7 +264,7 @@ model FaceEmbedding {
   createdAt   DateTime @default(now())
   event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   photo       Photo @relation(fields: [photoId], references: [id], onDelete: Cascade)
-  @@unique([photoId, faceIndex, modelName, modelVersion])
+  @@unique([photoId, faceIndex, modelName, modelVersion, preprocessingVersion], map: "FaceEmbedding_face_model_preprocessing_key")
   @@index([eventId])
   @@index([eventId, modelVersion])
   @@index([photoId])
@@ -321,6 +329,7 @@ model PhotoSearch {
   threshold      Decimal @db.Decimal(4, 3)
   faceCount      Int?
   modelVersion   String? @db.VarChar(80)
+  preprocessingVersion String? @db.VarChar(80)
   failureCode    String?
   expiresAt      DateTime
   createdAt      DateTime @default(now())

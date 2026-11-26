@@ -12,6 +12,12 @@ function friendly(error: unknown) {
   if (/no face|usable face/i.test(message))
     return "We couldn't detect a face. Please try another selfie.";
   if (/blur/i.test(message)) return 'Your selfie is a little blurry. Try again in better lighting.';
+  if (/TOO_DARK/i.test(message))
+    return 'Your face is too dark. Face a window or move into even light, then try again.';
+  if (/TOO_BRIGHT/i.test(message))
+    return 'Your face is overexposed. Move out of direct light and try again.';
+  if (/FACE_TOO_SMALL/i.test(message))
+    return 'Your face is too small in the image. Move closer and keep your full face in view.';
   if (error instanceof GuestApiError && error.status === 401)
     return 'Your session expired. Please start again.';
   return 'Photo matching is unavailable right now. Please try again later.';

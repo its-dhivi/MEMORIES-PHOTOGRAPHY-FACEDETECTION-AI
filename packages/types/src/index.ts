@@ -63,6 +63,10 @@ export interface EventSettings {
   downloadsEnabled: boolean;
   downloadAllEnabled: boolean;
   retentionDays: number;
+  similarityThreshold?: number | string;
+  matchingApprovedAt?: string | null;
+  matchingModelVersion?: string | null;
+  matchingPreprocessingVersion?: string | null;
 }
 
 export interface Paginated<T> {
